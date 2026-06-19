@@ -292,8 +292,9 @@ const VACANCY_NG_KEYWORDS = [
   '取扱中の物件はありません',
   '掲載中の物件の情報はありません',
   '周辺の募集中の物件を見てみる',
-  'このページは参考物件カタログです',
+  '参考物件カタログ',
   '現在募集中の部屋はありません',
+  '募集中の部屋はありません',
   'こちらの物件は掲載が終了しております',
   'ページが見つかりません',
   '該当ページがございません',
@@ -321,6 +322,7 @@ const URL_NG_PATTERNS = [
   { pattern: /\/shop\/shopinfo/i,             reason: '不動産会社店舗情報URL (/shop/shopinfo)' },
   { pattern: /suumo\.jp\/library\//i,         reason: 'SUUMO物件ライブラリー（過去掲載の参考ページ）' },
   { pattern: /canary-app\.jp\/chintai\/buildings\//i, reason: 'カナリー建物プロファイル（賃貸情報なし）' },
+  { pattern: /\/list(\/|$|\?|\.html)/i,        reason: '物件一覧ページ (/list)' },
 ];
 
 async function checkVacancyActive(url, item, page) {
