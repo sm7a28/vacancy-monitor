@@ -62,7 +62,7 @@ function loadConfig() {
 // Google Sheets
 // ================================================================
 
-const SHEET_NAME = 'ダンススタジオ一覧'; // TEMP: 検証用。シート名変更後に '監視リスト' へ戻す
+const SHEET_NAME = '監視リスト';
 
 // 列インデックス（0始まり）
 const COL = {
