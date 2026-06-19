@@ -1,0 +1,51 @@
+name: Rental Watcher
+
+on:
+  schedule:
+    - cron: '0 2 * * *'    # JST 11:00 → batch 0
+    - cron: '0 6 * * *'    # JST 15:00 → batch 1
+    - cron: '0 10 * * *'   # JST 19:00 → batch 2
+  workflow_dispatch:        # 手動実行（batch 0）
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install Chrome system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgbm-dev libasound2t64 libatk-bridge2.0-0 \
+            libatk1.0-0 libcups2 libdrm2 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libxss1 libxtst6
+
+      - name: Install Node packages
+        run: npm ci
+
+      - name: Set batch index from schedule
+        id: batch
+        run: |
+          case "${{ github.event.schedule }}" in
+            "0 6 * * *")  echo "index=1" >> $GITHUB_OUTPUT ;;
+            "0 10 * * *") echo "index=2" >> $GITHUB_OUTPUT ;;
+            *)             echo "index=0" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Run watcher
+        env:
+          BATCH_INDEX:          ${{ steps.batch.outputs.index }}
+          BATCH_TOTAL:          3
+          DISCORD_WEBHOOK_URL:  ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GEMINI_API_KEY:       ${{ secrets.GEMINI_API_KEY }}
+          SPREADSHEET_ID:       ${{ secrets.SPREADSHEET_ID }}
+          SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+        run: node rental-watcher.js

@@ -1,0 +1,12 @@
+node_modules/
+config.json
+service-account.json
+_sa.json
+*.log
+WORKLOG.md
+work-log.md
+.trash/
+scratch/
+*.xlsx
+register-task.ps1
+null
