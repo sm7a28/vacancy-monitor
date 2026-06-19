@@ -573,8 +573,11 @@ async function main() {
       allNewItems.push({ name: item.name, address: item.address, building: item.building, urls: trulyNew });
     }
 
-    // 処理完了ごとに即時スプシ更新（途中停止時の重複通知防止）
-    const updatedKnownUrls = [...item.knownUrls, ...trulyNew].slice(-maxKnownUrls);
+    // ポータル除外ドメインに一致するものを既知リストからもクリーンアップする
+    const cleanedKnownUrls = filterPortalUrls(item.knownUrls, config.excludePortalDomains);
+
+    // 処理完了ごとに即時スプシ更新（重複を排除し、最大保持数に切り詰める）
+    const updatedKnownUrls = [...new Set([...cleanedKnownUrls, ...trulyNew])].slice(-maxKnownUrls);
     await updateSheet(sheets, spreadsheetId, [{
       sheetRow:  item.sheetRow,
       knownUrls: updatedKnownUrls.join(', '),
