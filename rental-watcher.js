@@ -618,8 +618,6 @@ async function main() {
   // 実行完了レポート（新着の有無に関わらず毎回送信）
   try {
     const elapsedMin           = (Date.now() - startTime) / 60000;
-    const projectedMonthlyTotal = Math.round(elapsedMin * batchTotal * 30);
-    const budgetOverrun        = projectedMonthlyTotal > MONTHLY_BUDGET_MIN;
 
     const dailyCoverage = chunkSize * batchTotal; // 1日(全batch)で処理できる件数
     const warnings = [];
@@ -627,16 +625,12 @@ async function main() {
       const carryOver = fullList.length - dailyCoverage;
       warnings.push(`⚠️ 1日で全件未達: 1日${dailyCoverage}件処理（全${fullList.length}件、${carryOver}件は翌日繰越）`);
     }
-    if (budgetOverrun) {
-      warnings.push(`⚠️ 月間予算超過見込み: 推定${projectedMonthlyTotal}分/月（上限${MONTHLY_BUDGET_MIN}分）`);
-    }
 
     const lines = [
       `ジョブ: ${batchIndex + 1}/${batchTotal}`,
       `処理件数: 最古${monitoringList.length}件 / 全${fullList.length}件`,
       `新着: ${allNewItems.length}件`,
       `実行時間: ${elapsedMin.toFixed(1)}分`,
-      `推定月間合計: ${projectedMonthlyTotal}分 / 残り${MONTHLY_BUDGET_MIN - projectedMonthlyTotal}分`,
       ...warnings,
     ];
 
