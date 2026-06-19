@@ -2,9 +2,10 @@ name: Rental Watcher
 
 on:
   schedule:
-    - cron: '0 2 * * *'    # JST 11:00 → batch 0
-    - cron: '0 6 * * *'    # JST 15:00 → batch 1
-    - cron: '0 10 * * *'   # JST 19:00 → batch 2
+    - cron: '0 1 * * *'    # JST 10:00 → batch 0 (UTC 01:00)
+    - cron: '0 4 * * *'    # JST 13:00 → batch 1 (UTC 04:00)
+    - cron: '0 7 * * *'    # JST 16:00 → batch 2 (UTC 07:00)
+    - cron: '0 10 * * *'   # JST 19:00 → batch 3 (UTC 10:00)
   workflow_dispatch:        # 手動実行（batch 0）
 
 jobs:
@@ -35,15 +36,16 @@ jobs:
         id: batch
         run: |
           case "${{ github.event.schedule }}" in
-            "0 6 * * *")  echo "index=1" >> $GITHUB_OUTPUT ;;
-            "0 10 * * *") echo "index=2" >> $GITHUB_OUTPUT ;;
+            "0 4 * * *")  echo "index=1" >> $GITHUB_OUTPUT ;;
+            "0 7 * * *")  echo "index=2" >> $GITHUB_OUTPUT ;;
+            "0 10 * * *") echo "index=3" >> $GITHUB_OUTPUT ;;
             *)             echo "index=0" >> $GITHUB_OUTPUT ;;
           esac
 
       - name: Run watcher
         env:
           BATCH_INDEX:          ${{ steps.batch.outputs.index }}
-          BATCH_TOTAL:          3
+          BATCH_TOTAL:          4
           DISCORD_WEBHOOK_URL:  ${{ secrets.DISCORD_WEBHOOK_URL }}
           GEMINI_API_KEY:       ${{ secrets.GEMINI_API_KEY }}
           SPREADSHEET_ID:       ${{ secrets.SPREADSHEET_ID }}
