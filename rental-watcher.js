@@ -312,6 +312,7 @@ const VACANCY_NG_KEYWORDS = [
   '空きが出たら連絡を希望する',
   'この貸室は現在募集',
   '現在この物件は埋まっています',
+  '最新の空き状況はお問い合わせください',
 ];
 
 // URLレベルで除外するパターン（ページ訪問前に判定）
@@ -332,7 +333,7 @@ async function checkVacancyActive(url, item, page) {
   }
 
   try {
-    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     if (response && response.status() >= 400) {
       return { active: false, reason: `HTTP ${response.status()} (削除済み・存在しないページ)` };
     }
@@ -394,7 +395,13 @@ async function checkVacancyActive(url, item, page) {
 
     return { active: true };
   } catch (err) {
-    // 取得失敗時は通知する（見逃し防止）
+    // 致命的な接続エラー（ドメイン不在、SSLエラー、接続拒否、アドレス解決不可など）は除外する
+    const isFatalNetworkError = /ERR_NAME_NOT_RESOLVED|ERR_SSL_PROTOCOL_ERROR|ERR_CONNECTION_REFUSED|ERR_ADDRESS_UNREACHABLE|ERR_CERT_AUTHORITY_INVALID/i.test(err.message);
+    if (isFatalNetworkError) {
+      logger.info(`接続エラーにつき除外: "${err.message}" → ${url}`);
+      return { active: false, reason: `接続不可 (${err.message})` };
+    }
+    // その他のエラー（タイムアウト等）は見逃し防止のため通知対象とする
     logger.warn(` 空室確認失敗 (${url}): ${err.message} → 通知対象とする`);
     return { active: true };
   }
