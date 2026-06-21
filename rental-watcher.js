@@ -339,6 +339,8 @@ async function checkVacancyActive(url, item, page) {
     if (response && response.status() >= 400) {
       return { active: false, reason: `HTTP ${response.status()} (削除済み・存在しないページ)` };
     }
+    // 動的描画されるサイト対策（cjs.ne.jp等は domcontentloaded 時点で本文未描画）
+    await new Promise(r => setTimeout(r, 1500));
     const text = await page.evaluate(() => document.body?.innerText || '');
 
     // ① 空室NGキーワードチェック
