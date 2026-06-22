@@ -392,6 +392,13 @@ async function checkVacancyActive(url, item, page) {
     const addressFound = addrTokens.some(token => token.length >= 3 && text.includes(token));
     if (!addressFound) return { active: false, reason: '対象ビルの住所がページ内に見つからない（一覧ページ等の可能性）' };
 
+    // ③-b 番地（X-X-X形式）の厳格チェック：監視対象の番地そのものがページ内に無ければ除外
+    // 「百人町1-24-8 を監視中なのに 百人町3-26-1 が表示されている別建物ページ」を弾くため
+    const targetStreetNum = item.address.match(/\d+[-－―]\d+[-－―]\d+/)?.[0];
+    if (targetStreetNum && !text.includes(targetStreetNum)) {
+      return { active: false, reason: `監視対象の番地「${targetStreetNum}」がページ内に見つからない（近隣の別建物の可能性）` };
+    }
+
     // ④ 建物名がページの主役か確認（タイトル・h1に建物名または番地が含まれるか）
     // 「おすすめ物件」欄に掲載されているだけのページを除外するため
     if (buildingNames.length > 0) {
