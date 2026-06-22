@@ -337,12 +337,19 @@ async function checkVacancyActive(url, item, page) {
   }
 
   try {
-    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    // 動的描画サイト対策: networkidle2 を最大10秒待ち、間に合わなければ domcontentloaded の状態で続行
+    let response;
+    try {
+      response = await page.goto(url, { waitUntil: 'networkidle2', timeout: 10000 });
+    } catch (e) {
+      // networkidle2 タイムアウト時は domcontentloaded を再試行
+      response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    }
     if (response && response.status() >= 400) {
       return { active: false, reason: `HTTP ${response.status()} (削除済み・存在しないページ)` };
     }
-    // 動的描画されるサイト対策（cjs.ne.jp等は domcontentloaded 時点で本文未描画）
-    await new Promise(r => setTimeout(r, 1500));
+    // 念のため最低1秒待ってからテキスト抽出（遅延描画パーツ対策）
+    await new Promise(r => setTimeout(r, 1000));
     const text = await page.evaluate(() => document.body?.innerText || '');
 
     // ① 空室NGキーワードチェック
