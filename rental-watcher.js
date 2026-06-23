@@ -325,6 +325,7 @@ const URL_NG_PATTERNS = [
   { pattern: /suumo\.jp\/library\//i,         reason: 'SUUMO物件ライブラリー（過去掲載の参考ページ）' },
   { pattern: /canary-app\.jp\/chintai\/buildings\//i, reason: 'カナリー建物プロファイル（賃貸情報なし）' },
   { pattern: /cjs\.ne\.jp\/chintai\/detail_b\//i, reason: '賃貸住宅サービス建物カタログ（募集中の部屋なし）' },
+  { pattern: /koenji-f\.jp\/bukken\/r\/search\d+\.html/i, reason: '高円寺不動産の検索結果ページ（個別物件ではない）' },
   { pattern: /\/list(\/|$|\?|\.html)/i,        reason: '物件一覧ページ (/list)' },
 ];
 
