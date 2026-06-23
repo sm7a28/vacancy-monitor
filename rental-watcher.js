@@ -423,9 +423,10 @@ async function checkVacancyActive(url, item, page) {
       logger.info(`接続エラーにつき除外: "${err.message}" → ${url}`);
       return { active: false, reason: `接続不可 (${err.message})` };
     }
-    // その他のエラー（タイムアウト等）は見逃し防止のため通知対象とする
-    logger.warn(` 空室確認失敗 (${url}): ${err.message} → 通知対象とする`);
-    return { active: true };
+    // その他のエラー（タイムアウト・ERR_BLOCKED_BY_CLIENT 等）は除外する
+    // 検証できないURLを通知すると誤通知の温床になるため、信頼できない場合は通知しない方針
+    logger.info(`空室なし除外: 取得失敗 "${err.message}" → ${url}`);
+    return { active: false, reason: `ページ取得失敗 (${err.message})` };
   }
 }
 
