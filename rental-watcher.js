@@ -579,8 +579,8 @@ async function main() {
     let trulyNew = [];
     if (candidates.length > 0) {
       trulyNew = await judgeNewUrls(model, item, candidates);
-      // 無料枠 5 RPM 対策（12秒間隔）
-      await new Promise(r => setTimeout(r, 12000));
+      // Tier 1 は 4,000 RPM 上限。スパイク防止に 1 秒だけ間を空ける。
+      await new Promise(r => setTimeout(r, 1000));
     }
 
     // Puppeteer 三次判定：空室確認（ページ内容でNGキーワードチェック）

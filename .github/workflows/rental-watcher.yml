@@ -2,12 +2,20 @@ name: Rental Watcher
 
 on:
   schedule:
-    - cron: '30 0 * * *'    # JST 09:30 → batch 0
-    - cron: '0 2 * * *'     # JST 11:00 → batch 1
-    - cron: '30 4 * * *'    # JST 13:30 → batch 2
+    # 2時間ごと × 1日12回。各 batch (0/1) は4時間間隔で1日6回ずつ動く。
+    # JST = UTC + 9
+    - cron: '0 22 * * *'    # JST 07:00 → batch 0
+    - cron: '0 0 * * *'     # JST 09:00 → batch 1
+    - cron: '0 2 * * *'     # JST 11:00 → batch 0
+    - cron: '0 4 * * *'     # JST 13:00 → batch 1
     - cron: '0 6 * * *'     # JST 15:00 → batch 0
-    - cron: '0 9 * * *'     # JST 18:00 → batch 1
-    - cron: '0 11 * * *'    # JST 20:00 → batch 2
+    - cron: '0 8 * * *'     # JST 17:00 → batch 1
+    - cron: '0 10 * * *'    # JST 19:00 → batch 0
+    - cron: '0 12 * * *'    # JST 21:00 → batch 1
+    - cron: '0 14 * * *'    # JST 23:00 → batch 0
+    - cron: '0 16 * * *'    # JST 01:00 → batch 1
+    - cron: '0 18 * * *'    # JST 03:00 → batch 0
+    - cron: '0 20 * * *'    # JST 05:00 → batch 1
   workflow_dispatch:       # 手動実行（batch 0）
 
 jobs:
@@ -38,15 +46,14 @@ jobs:
         id: batch
         run: |
           case "${{ github.event.schedule }}" in
-            "0 2 * * *" | "0 9 * * *")   echo "index=1" >> $GITHUB_OUTPUT ;;
-            "30 4 * * *" | "0 11 * * *") echo "index=2" >> $GITHUB_OUTPUT ;;
-            *)                            echo "index=0" >> $GITHUB_OUTPUT ;;
+            "0 0 * * *" | "0 4 * * *" | "0 8 * * *" | "0 12 * * *" | "0 16 * * *" | "0 20 * * *") echo "index=1" >> $GITHUB_OUTPUT ;;
+            *) echo "index=0" >> $GITHUB_OUTPUT ;;
           esac
 
       - name: Run watcher
         env:
           BATCH_INDEX:          ${{ steps.batch.outputs.index }}
-          BATCH_TOTAL:          3
+          BATCH_TOTAL:          2
           DISCORD_WEBHOOK_URL:  ${{ secrets.DISCORD_WEBHOOK_URL }}
           GEMINI_API_KEY:       ${{ secrets.GEMINI_API_KEY }}
           SPREADSHEET_ID:       ${{ secrets.SPREADSHEET_ID }}
