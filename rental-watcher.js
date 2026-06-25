@@ -316,6 +316,14 @@ const VACANCY_NG_KEYWORDS = [
   'この貸室は現在募集',
   '現在この物件は埋まっています',
   '最新の空き状況はお問い合わせください',
+  '現在空室情報はございません',
+  '申し訳ございません、現在取り扱っている空室はございません',
+];
+
+// 数値ゼロ件表記（spacingが揺れるため正規表現で判定）
+const VACANCY_ZERO_PATTERNS = [
+  /空室区画数[\s：:]*0\s*件/,
+  /\[\s*0\s*部屋\s*\]/,
 ];
 
 // URLレベルで除外するパターン（ページ訪問前に判定）
@@ -357,6 +365,9 @@ async function checkVacancyActive(url, item, page) {
     // ① 空室NGキーワードチェック
     const hit = VACANCY_NG_KEYWORDS.find(kw => text.includes(kw));
     if (hit) return { active: false, reason: `NGキーワード「${hit}」` };
+
+    const zeroHit = VACANCY_ZERO_PATTERNS.find(pat => pat.test(text));
+    if (zeroHit) return { active: false, reason: `ゼロ件表記「${zeroHit}」` };
 
     // ② 確認日チェック（18ヶ月以上前は古いとみなして除外）
     const confirmDatePatterns = [
