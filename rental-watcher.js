@@ -400,6 +400,18 @@ async function checkVacancyActive(url, item, page) {
       return { active: false, reason: `監視対象の番地「${targetStreetNum}」がページ内に見つからない（近隣の別建物の可能性）` };
     }
 
+    // ③-c 賃料上限チェック: ページ内の「賃料/月額/家賃」表記が上限超過なら除外
+    // 「表記基準」で判定（万円→円換算 or 円表記をそのまま）
+    const MAX_RENT_YEN = 300000; // 30万円
+    const manMatch = text.match(/(?:賃料|月額|家賃|月\s*額)[\s：:\-]*[¥￥]?\s*(\d+(?:\.\d+)?)\s*万円/);
+    const yenMatch = text.match(/(?:賃料|月額|家賃|月\s*額)[\s：:\-]*[¥￥]?\s*(\d{1,3}(?:,\d{3})+)\s*円?/);
+    let rentYen = null;
+    if (manMatch)      rentYen = Math.round(parseFloat(manMatch[1]) * 10000);
+    else if (yenMatch) rentYen = parseInt(yenMatch[1].replace(/,/g, ''), 10);
+    if (rentYen !== null && rentYen > MAX_RENT_YEN) {
+      return { active: false, reason: `賃料${(rentYen/10000).toFixed(1)}万円が上限30万円超` };
+    }
+
     // ④ 建物名がページの主役か確認（タイトル・h1に建物名または番地が含まれるか）
     // 「おすすめ物件」欄に掲載されているだけのページを除外するため
     if (buildingNames.length > 0) {
