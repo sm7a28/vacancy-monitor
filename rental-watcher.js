@@ -430,6 +430,18 @@ async function checkVacancyActive(url, item, page) {
       return { active: false, reason: `賃料${(rentYen/10000).toFixed(1)}万円が上限30万円超` };
     }
 
+    // ③-d 全室成約済みチェック: 「該当物件N室」の件数と「ご成約」バッジ数が一致したら除外
+    // 単純に「成約済」をNGキーワードにすると空き＋成約済み混在ページも除外してしまうため、
+    // 件数を数えて「全部成約済み」の場合のみ除外する
+    const totalRoomsMatch = text.match(/該当物件\s*(\d+)\s*室/);
+    if (totalRoomsMatch) {
+      const totalRooms = parseInt(totalRoomsMatch[1], 10);
+      const contractedCount = (text.match(/ご成約/g) || []).length;
+      if (totalRooms > 0 && contractedCount >= totalRooms) {
+        return { active: false, reason: `該当物件${totalRooms}室すべて「ご成約」済み` };
+      }
+    }
+
     // ④ 建物名がページの主役か確認（タイトル・h1に建物名または番地が含まれるか）
     // 「おすすめ物件」欄に掲載されているだけのページを除外するため
     if (buildingNames.length > 0) {
