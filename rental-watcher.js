@@ -375,6 +375,7 @@ async function checkVacancyActive(url, item, page) {
       /確認日[：:＊*\s]*(\d{4})[年/](\d{1,2})/,
       /最終確認[：:\s]*(\d{4})[年/](\d{1,2})/,
       /取材日[：:\s]*(\d{4})[年/](\d{1,2})/,
+      /情報登録日[：:\s]*(\d{4})[年/](\d{1,2})/,
     ];
     for (const pat of confirmDatePatterns) {
       const m = text.match(pat);
