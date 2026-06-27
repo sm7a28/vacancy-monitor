@@ -363,9 +363,12 @@ async function checkVacancyActive(url, item, page) {
     // 念のため最低1秒待ってからテキスト抽出（遅延描画パーツ対策）
     await new Promise(r => setTimeout(r, 1000));
     const text = await page.evaluate(() => document.body?.innerText || '');
+    // 表組みのセル内改行でNGキーワードが分断されるケースに対応するため、
+    // 空白・改行を除去した文字列でキーワード一致を判定する
+    const flatText = text.replace(/\s+/g, '');
 
     // ① 空室NGキーワードチェック
-    const hit = VACANCY_NG_KEYWORDS.find(kw => text.includes(kw));
+    const hit = VACANCY_NG_KEYWORDS.find(kw => flatText.includes(kw));
     if (hit) return { active: false, reason: `NGキーワード「${hit}」` };
 
     const zeroHit = VACANCY_ZERO_PATTERNS.find(pat => pat.test(text));
