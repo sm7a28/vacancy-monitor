@@ -554,6 +554,10 @@ const PER_RUN_MAX = Math.floor(
   ((MONTHLY_BUDGET_MIN / 30 / batchTotal) - SETUP_OVERHEAD_MIN) * 60 / SEC_PER_ITEM_EST
 ); // batchTotal=3 → ≈ 49件/回
 
+// 1日に各batchが実行される回数（ワークフローのcronスケジュールと一致させること。
+// 現状: 2時間毎 × batchTotal=2 → 各batchは1日6回実行）
+const RUNS_PER_DAY_PER_BATCH = 6;
+
 async function main() {
   const startTime = Date.now();
   logger.info('処理開始');
@@ -585,7 +589,7 @@ async function main() {
   const chunkSize      = Math.min(idealChunk, PER_RUN_MAX);
   const budgetCapped   = idealChunk > PER_RUN_MAX;
   const monitoringList = fullList.slice(0, chunkSize);
-  logger.info(`ジョブ${batchIndex + 1}/${batchTotal}: 最古${monitoringList.length}件を処理 / 全${fullList.length}件`);
+  logger.info(`ジョブ${batchIndex + 1}/${batchTotal}: 未チェック期間が長い順に${monitoringList.length}件を処理 / 全${fullList.length}件`);
 
   // Gemini モデル
   const genAI = new GoogleGenerativeAI(geminiApiKey);
@@ -687,16 +691,19 @@ async function main() {
   try {
     const elapsedMin           = (Date.now() - startTime) / 60000;
 
-    const dailyCoverage = chunkSize * batchTotal; // 1日(全batch)で処理できる件数
+    // 1日の巡回回数 = (1回の処理件数 × batch数 × 1日の実行回数) ÷ 全件数
+    // ワークフローは2時間毎に実行されるため、1日1回ではなく RUNS_PER_DAY_PER_BATCH 回/batch 動く
+    const dailyItemChecks = chunkSize * batchTotal * RUNS_PER_DAY_PER_BATCH;
+    const rotationsPerDay = fullList.length > 0 ? dailyItemChecks / fullList.length : 0;
     const warnings = [];
-    if (budgetCapped && dailyCoverage < fullList.length) {
-      const carryOver = fullList.length - dailyCoverage;
-      warnings.push(`⚠️ 1日で全件未達: 1日${dailyCoverage}件処理（全${fullList.length}件、${carryOver}件は翌日繰越）`);
+    if (budgetCapped && rotationsPerDay < 1) {
+      warnings.push(`⚠️ 1日1巡未達: 現在約${rotationsPerDay.toFixed(2)}巡/日（全${fullList.length}件、1回${chunkSize}件処理）`);
     }
 
     const lines = [
       `ジョブ: ${batchIndex + 1}/${batchTotal}`,
-      `処理件数: 最古${monitoringList.length}件 / 全${fullList.length}件`,
+      `処理件数: 未チェック期間が長い順に${monitoringList.length}件 / 全${fullList.length}件`,
+      `巡回頻度: 約${rotationsPerDay.toFixed(1)}巡/日`,
       `新着: ${allNewItems.length}件`,
       `実行時間: ${elapsedMin.toFixed(1)}分`,
       ...warnings,
