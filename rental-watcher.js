@@ -395,6 +395,22 @@ async function checkVacancyActive(url, item, page) {
       }
     }
 
+    // ②-b ラベルなし公開日/更新日チェック: アイコンのみで「YYYY年M月D日」が2つ連続表示される
+    // サイト（mastiff-re.jp等）対策。タイトル直後（先頭600文字以内）に日付が2つ連続して
+    // 現れる場合、後者（更新日相当）が18ヶ月以上前なら古いとみなして除外する
+    const dualDateMatch = text.slice(0, 600).match(
+      /(\d{4})年(\d{1,2})月(\d{1,2})日\s*(\d{4})年(\d{1,2})月(\d{1,2})日/
+    );
+    if (dualDateMatch) {
+      const year  = parseInt(dualDateMatch[4], 10);
+      const month = parseInt(dualDateMatch[5], 10);
+      const now = new Date();
+      const monthsDiff = (now.getFullYear() - year) * 12 + (now.getMonth() + 1 - month);
+      if (monthsDiff > 18) {
+        return { active: false, reason: `更新日が${year}年${month}月（${monthsDiff}ヶ月前）と古い` };
+      }
+    }
+
     // ③ 住所の関連性チェック（対象ビルの住所キーワードがページ内に存在するか）
     // 住所から番地部分（例: "2-15-22"）を抽出して確認
     const buildingNames = item.buildingNames && item.buildingNames.length > 0
