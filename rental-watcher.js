@@ -673,8 +673,19 @@ async function main() {
     // ポータル除外ドメインに一致するものを既知リストからもクリーンアップする
     const cleanedKnownUrls = filterPortalUrls(item.knownUrls, config.excludePortalDomains);
 
+    // 既知URLを再チェック：空室なしに変わったURLはknownUrlsから削除（次回再検出を可能にする）
+    const revalidatedKnownUrls = [];
+    for (const url of cleanedKnownUrls) {
+      const { active, reason } = await checkVacancyActive(url, item, page);
+      if (active) {
+        revalidatedKnownUrls.push(url);
+      } else {
+        logger.info(`既知URL空室消滅: "${reason}" → ${url}`);
+      }
+    }
+
     // 処理完了ごとに即時スプシ更新（重複を排除し、最大保持数に切り詰める）
-    const updatedKnownUrls = [...new Set([...cleanedKnownUrls, ...trulyNew])].slice(-maxKnownUrls);
+    const updatedKnownUrls = [...new Set([...revalidatedKnownUrls, ...trulyNew])].slice(-maxKnownUrls);
     await updateSheet(sheets, spreadsheetId, [{
       sheetRow:  item.sheetRow,
       knownUrls: updatedKnownUrls.join(', '),
