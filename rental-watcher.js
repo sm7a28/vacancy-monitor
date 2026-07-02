@@ -673,14 +673,19 @@ async function main() {
     // ポータル除外ドメインに一致するものを既知リストからもクリーンアップする
     const cleanedKnownUrls = filterPortalUrls(item.knownUrls, config.excludePortalDomains);
 
-    // 既知URLを再チェック：空室なしに変わったURLはknownUrlsから削除（次回再検出を可能にする）
+    // 既知URLを再チェック：明確な空室消滅シグナルのみknownUrlsから削除
+    // タイムアウト・住所未検出・403等の非確定的な理由では削除しない（重複通知を防ぐ）
+    const DEFINITIVE_GONE = /^NGキーワード|^ゼロ件表記|^HTTP 404|^該当物件.*ご成約|確認日が.*古い|更新日が.*古い|アーカイブ/;
     const revalidatedKnownUrls = [];
     for (const url of cleanedKnownUrls) {
       const { active, reason } = await checkVacancyActive(url, item, page);
       if (active) {
         revalidatedKnownUrls.push(url);
-      } else {
+      } else if (DEFINITIVE_GONE.test(reason)) {
         logger.info(`既知URL空室消滅: "${reason}" → ${url}`);
+      } else {
+        revalidatedKnownUrls.push(url);
+        logger.info(`既知URL再チェック保持（非確定）: "${reason}" → ${url}`);
       }
     }
 
