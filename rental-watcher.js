@@ -628,7 +628,8 @@ async function main() {
   const allNewItems = [];
 
   for (const item of monitoringList) {
-    const query = [item.address, item.building, '賃貸'].filter(Boolean).join(' ');
+    const buildingForQuery = (item.building || '').replace(/\s*\d+号室.*$/, '').trim();
+    const query = [item.address, buildingForQuery, '賃貸'].filter(Boolean).join(' ');
 
     // 検索
     const foundUrls      = await search(query, page);
