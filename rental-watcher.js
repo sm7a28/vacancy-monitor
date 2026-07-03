@@ -179,7 +179,7 @@ ${foundList}
 - 時間貸し・日貸しのスペース予約ページ（時間単位の利用申込）
 - 各種教室・スクールの案内ページ
 - 口コミサイト・地図サービス・SNS・ブログ
-- 過去の掲載情報・アーカイブ（homemate.co.jp/archive/ 等の /archive/ を含むURL）
+- 過去の掲載情報・アーカイブ（homemate.co.jp/archive/ 等の /archive/ を含むURL）※ただし homes.co.jp/archive/b-XXX/ はビル情報ページのため除外しない
 - 居住用の賃貸物件（マンション・アパートの居住用居室、間取りがワンルーム・1K・2LDK等のもの）
 - 投資用物件・収益物件・区分マンション等の投資家向けページ（楽待・健美家・restyle.tokyo等）
 - 監視対象テナント自身のウェブサイト（アクセスページ・案内ページ・スケジュールページ等）
@@ -332,7 +332,8 @@ const VACANCY_ZERO_PATTERNS = [
 
 // URLレベルで除外するパターン（ページ訪問前に判定）
 const URL_NG_PATTERNS = [
-  { pattern: /\/archive\//i,                  reason: 'アーカイブURL (/archive/)' },
+  { pattern: /\/archive\//i,                  reason: 'アーカイブURL (/archive/)',
+    except: /homes\.co\.jp\/archive\//i },   // HOMESの /archive/b-XXX/ はビル情報ページ（現行募集を含む）
   { pattern: /\/shop\/shopinfo/i,             reason: '不動産会社店舗情報URL (/shop/shopinfo)' },
   { pattern: /suumo\.jp\/library\//i,         reason: 'SUUMO物件ライブラリー（過去掲載の参考ページ）' },
   { pattern: /canary-app\.jp\/chintai\/buildings\//i, reason: 'カナリー建物プロファイル（賃貸情報なし）' },
@@ -343,8 +344,8 @@ const URL_NG_PATTERNS = [
 
 async function checkVacancyActive(url, item, page) {
   // URLパターンチェック（ページ訪問前に除外）
-  for (const { pattern, reason } of URL_NG_PATTERNS) {
-    if (pattern.test(url)) {
+  for (const { pattern, reason, except } of URL_NG_PATTERNS) {
+    if (pattern.test(url) && !(except && except.test(url))) {
       logger.info(`空室なし除外: "${reason}" → ${url}`);
       return { active: false, reason };
     }
