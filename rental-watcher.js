@@ -66,12 +66,15 @@ const SHEET_NAME = '監視リスト';
 
 // 列インデックス（0始まり）
 const COL = {
-  NAME:       1,  // B: 物件名
-  ADDRESS:    2,  // C: 住所
-  BUILDING:   3,  // D: ビル名
-  KNOWN_URLS: 10, // K: 既知URL
-  LAST_CHECK: 11, // L: 最終チェック
-  HIT_COUNT:  12, // M: ヒット数
+  NAME:        1,  // B: 物件名
+  ADDRESS:     2,  // C: 住所
+  BUILDING:    3,  // D: ビル名
+  KNOWN_URLS:  10, // K: 既知URL
+  LAST_CHECK:  11, // L: 最終チェック
+  HIT_COUNT:   12, // M: ヒット数
+  ATHOME_BLDG: 14, // O: AtHomeビルURL
+  HOMES_BLDG:  15, // P: ホームズビルURL
+  SUUMO_BLDG:  16, // Q: SUUMOビルURL
 };
 
 async function getSheetsClient(keyFilePath) {
@@ -85,7 +88,7 @@ async function getSheetsClient(keyFilePath) {
 async function loadMonitoringList(sheets, spreadsheetId) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${SHEET_NAME}!A:M`,
+    range: `${SHEET_NAME}!A:Q`,
   });
 
   const rows = res.data.values || [];
@@ -120,6 +123,9 @@ async function loadMonitoringList(sheets, spreadsheetId) {
       building: buildingPrimary,
       buildingNames,
       knownUrls, lastCheckRaw,
+      athomeBldgUrl: (row[COL.ATHOME_BLDG] || '').trim(),
+      homesBldgUrl:  (row[COL.HOMES_BLDG]  || '').trim(),
+      suumoBldgUrl:  (row[COL.SUUMO_BLDG]  || '').trim(),
     });
   });
 
@@ -497,6 +503,87 @@ async function checkVacancyActive(url, item, page) {
 }
 
 // ================================================================
+// ビルページ直接監視（O:AtHome / P:ホームズ / Q:SUUMO 列のURL）
+// ================================================================
+//
+// 検索エンジン経由と並行する第2の検知ルート。ビルページには募集中物件の
+// 個別リンクが載るため、それを候補URLとして返す（建物との関連は確定済み
+// なので Gemini 判定は不要。空室確認は共通フローで通す）。
+// - ホームズ archive/b-: homes.co.jp/chintai/room/<hash>/
+// - AtHome bldg-library: athome.co.jp/{chintai|rent_office|rent_store}/<物件番号>/
+// - SUUMO library to_: suumo.jp/chintai/jnc_<番号>/（現募集がある場合のみ出現）
+
+// bot検知チャレンジページの判定
+function isChallengePage(title, bodyHead) {
+  return /認証|verif|human|robot|captcha|アクセスが集中/i.test(title + ' ' + bodyHead);
+}
+
+async function fetchBldgPage(page, url) {
+  try {
+    try {
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
+    } catch (e) {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    }
+    // JSチャレンジ（AtHome「認証中」等）は数秒で自動遷移するため最大20秒待つ
+    let info = null;
+    for (let k = 0; k < 10; k++) {
+      await new Promise(r => setTimeout(r, 2000));
+      info = await page.evaluate(() => ({
+        title: document.title || '',
+        bodyHead: document.body ? document.body.innerText.slice(0, 300) : '',
+        bodyText: document.body ? document.body.innerText : '',
+        links: [...document.querySelectorAll('a')].map(a => a.href).filter(h => h && h.startsWith('http')),
+      })).catch(() => null);
+      if (info && !isChallengePage(info.title, info.bodyHead)) return { blocked: false, ...info };
+    }
+    return { blocked: true };
+  } catch (err) {
+    logger.info(`ビルページ取得失敗: ${err.message} → ${url}`);
+    return { blocked: true };
+  }
+}
+
+// サイトごとの募集中物件リンク抽出定義
+// clean: 追跡パラメータ等を除去して正規URLにする
+const BLDG_LINK_RULES = [
+  {
+    key: 'homesBldgUrl', site: 'HOMES',
+    pattern: /homes\.co\.jp\/chintai\/room\/[0-9a-f]+/,
+    clean: h => (h.match(/https?:\/\/www\.homes\.co\.jp\/chintai\/room\/[0-9a-f]+\//) || [h])[0],
+  },
+  {
+    key: 'athomeBldgUrl', site: 'AtHome',
+    pattern: /athome\.co\.jp\/(chintai|rent_office|rent_store)\/\d{8,}/,
+    clean: h => (h.match(/https?:\/\/www\.athome\.co\.jp\/(?:chintai|rent_office|rent_store)\/\d{8,}\//) || [h])[0],
+  },
+  {
+    key: 'suumoBldgUrl', site: 'SUUMO',
+    pattern: /suumo\.jp\/chintai\/jnc_\d+/,
+    clean: h => (h.match(/https?:\/\/suumo\.jp\/chintai\/jnc_\d+\//) || [h])[0],
+  },
+];
+
+async function checkBuildingPages(item, page) {
+  const candidateUrls = []; // 募集中物件の個別URL（空室確認に回す）
+
+  for (const rule of BLDG_LINK_RULES) {
+    const bldgUrl = item[rule.key];
+    if (!bldgUrl) continue;
+    const res = await fetchBldgPage(page, bldgUrl);
+    if (res.blocked) {
+      logger.info(`ビルページ(${rule.site}): 取得不可（チャレンジ/エラー）→ ${item.name}`);
+      continue;
+    }
+    const found = [...new Set(res.links.filter(h => rule.pattern.test(h)).map(rule.clean))];
+    candidateUrls.push(...found);
+    if (found.length > 0) logger.info(`ビルページ(${rule.site}): 募集リンク${found.length}件 → ${item.name}`);
+  }
+
+  return { candidateUrls: [...new Set(candidateUrls.map(normalizeUrl))] };
+}
+
+// ================================================================
 // URL 正規化 & ポータルサイト除外
 // ================================================================
 
@@ -568,7 +655,7 @@ const batchTotal = parseInt(process.env.BATCH_TOTAL ?? '1', 10);
 // 1日 batchTotal 回 × 30日 実行する前提で、1回あたりの予算を逆算する。
 const MONTHLY_BUDGET_MIN  = 2000;  // GitHub Actions 無料枠（分/月）
 const SETUP_OVERHEAD_MIN  = 4;     // 1回あたりのセットアップ所要時間（分）
-const SEC_PER_ITEM_EST    = 22;    // 1件あたりの推定処理時間（秒）
+const SEC_PER_ITEM_EST    = 28;    // 1件あたりの推定処理時間（秒）※ビルページ直接監視(最大3ページ/件)を含む
 const PER_RUN_MAX = Math.floor(
   ((MONTHLY_BUDGET_MIN / 30 / batchTotal) - SETUP_OVERHEAD_MIN) * 60 / SEC_PER_ITEM_EST
 ); // batchTotal=3 → ≈ 49件/回
@@ -647,6 +734,14 @@ async function main() {
     const knownSet    = new Set(item.knownUrls);
     const candidates  = portalFiltered.filter(u => !knownSet.has(u));
 
+    // ビルページ直接監視（O/P/Q列にURLがある場合のみ）
+    // ここで得た候補は建物との関連が確定済みのため Gemini 判定をスキップする
+    let bldgResult = { candidateUrls: [] };
+    if (item.homesBldgUrl || item.suumoBldgUrl || item.athomeBldgUrl) {
+      bldgResult = await checkBuildingPages(item, page);
+    }
+    const bldgCandidates = bldgResult.candidateUrls.filter(u => !knownSet.has(u));
+
     // Gemini 二次判定（候補がある場合のみ）
     let trulyNew = [];
     if (candidates.length > 0) {
@@ -654,6 +749,9 @@ async function main() {
       // Tier 1 は 4,000 RPM 上限。スパイク防止に 1 秒だけ間を空ける。
       await new Promise(r => setTimeout(r, 1000));
     }
+
+    // ビルページ由来の候補を合流（Geminiスキップ、空室確認は共通で通す）
+    trulyNew = [...new Set([...trulyNew, ...bldgCandidates])];
 
     // Puppeteer 三次判定：空室確認（ページ内容でNGキーワードチェック）
     if (trulyNew.length > 0) {
@@ -669,7 +767,7 @@ async function main() {
       trulyNew = checked;
     }
 
-    logger.info(`"${item.name}" 検索:${foundUrls.length}件 除外後:${portalFiltered.length}件 候補:${candidates.length}件 新着:${trulyNew.length}件`);
+    logger.info(`"${item.name}" 検索:${foundUrls.length}件 除外後:${portalFiltered.length}件 候補:${candidates.length}件 ビルページ候補:${bldgCandidates.length}件 新着:${trulyNew.length}件`);
 
     if (trulyNew.length > 0) {
       allNewItems.push({ name: item.name, address: item.address, building: item.building, urls: trulyNew });
@@ -768,7 +866,12 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  logger.error(`起動エラー: ${err.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    logger.error(`起動エラー: ${err.message}`);
+    process.exit(1);
+  });
+}
+
+// テスト用エクスポート
+module.exports = { checkBuildingPages, checkVacancyActive };
