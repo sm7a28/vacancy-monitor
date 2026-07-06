@@ -341,6 +341,7 @@ const URL_NG_PATTERNS = [
   { pattern: /\/archive\//i,                  reason: 'アーカイブURL (/archive/)',
     except: /homes\.co\.jp\/archive\//i },   // HOMESの /archive/b-XXX/ はビル情報ページ（現行募集を含む）
   { pattern: /\/shop\/shopinfo/i,             reason: '不動産会社店舗情報URL (/shop/shopinfo)' },
+  { pattern: /chintai-office\.net\/catalog\//i, reason: '賃貸オフィスビルカタログ（建物プロフィールのみ・空室情報なし）' },
   { pattern: /suumo\.jp\/library\//i,         reason: 'SUUMO物件ライブラリー（過去掲載の参考ページ）' },
   { pattern: /canary-app\.jp\/chintai\/buildings\//i, reason: 'カナリー建物プロファイル（賃貸情報なし）' },
   { pattern: /cjs\.ne\.jp\/chintai\/detail_b\//i, reason: '賃貸住宅サービス建物カタログ（募集中の部屋なし）' },
