@@ -735,6 +735,12 @@ async function main() {
   );
 
   const allNewItems = [];
+  let processedCount          = 0;
+  let itemsWithSearchResults  = 0;
+  let totalSearchResults      = 0;
+  let buildingPagesChecked    = 0;
+  let buildingCandidatesTotal = 0;
+  let knownUrlsChecked        = 0;
 
   for (const item of monitoringList) {
     const buildingForQuery = (item.building || '').replace(/\s*\d+号室.*$/, '').trim();
@@ -744,6 +750,8 @@ async function main() {
     // 検索
     const foundUrls      = await search(query, page);
     const normalizedUrls = [...new Set(foundUrls.map(normalizeUrl))];
+    totalSearchResults += foundUrls.length;
+    if (foundUrls.length > 0) itemsWithSearchResults++;
 
     // ポータルサイト除外（スペースマーケット等の時間貸しサイトを弾く）
     const portalFiltered = filterPortalUrls(normalizedUrls, config.excludePortalDomains);
@@ -760,9 +768,11 @@ async function main() {
     // ここで得た候補は建物との関連が確定済みのため Gemini 判定をスキップする
     let bldgResult = { candidateUrls: [] };
     if (item.homesBldgUrl || item.suumoBldgUrl || item.athomeBldgUrl) {
+      buildingPagesChecked++;
       bldgResult = await checkBuildingPages(item, page);
     }
     const bldgCandidates = bldgResult.candidateUrls.filter(u => !knownSet.has(u));
+    buildingCandidatesTotal += bldgCandidates.length;
 
     // Gemini 二次判定（候補がある場合のみ）
     let trulyNew = [];
@@ -797,6 +807,7 @@ async function main() {
 
     // ポータル除外ドメインに一致するものを既知リストからもクリーンアップする
     const cleanedKnownUrls = filterPortalUrls(item.knownUrls, config.excludePortalDomains);
+    knownUrlsChecked += cleanedKnownUrls.length;
 
     // 既知URLを再チェック：明確な空室消滅シグナルのみknownUrlsから削除
     // タイムアウト・住所未検出・403等の非確定的な理由では削除しない（重複通知を防ぐ）
@@ -822,6 +833,7 @@ async function main() {
       lastCheck: new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }),
       hitCount:  foundUrls.length,
     }]);
+    processedCount++;
 
     await new Promise(r => setTimeout(r, searchDelay));
   }
@@ -856,10 +868,16 @@ async function main() {
     if (budgetCapped && rotationsPerDay < 1) {
       warnings.push(`⚠️ 1日1巡未達: 現在約${rotationsPerDay.toFixed(2)}巡/日（全${fullList.length}件、1回${chunkSize}件処理）`);
     }
+    if (processedCount > 0 && itemsWithSearchResults === 0) {
+      warnings.push('⚠️ 検索結果が全件0件: 検索エンジン取得障害の可能性');
+    }
 
     const lines = [
       `ジョブ: ${batchIndex + 1}/${batchTotal}`,
       `処理件数: 未チェック期間が長い順に${monitoringList.length}件 / 全${fullList.length}件`,
+      `検索取得: ${itemsWithSearchResults}/${processedCount}件で結果あり（合計${totalSearchResults}URL）`,
+      `ビルページ: ${buildingPagesChecked}件確認 / 新規候補${buildingCandidatesTotal}URL`,
+      `既知URL再確認: ${knownUrlsChecked}URL`,
       `巡回頻度: 約${rotationsPerDay.toFixed(1)}巡/日`,
       `新着: ${allNewItems.length}件`,
       `実行時間: ${elapsedMin.toFixed(1)}分`,
