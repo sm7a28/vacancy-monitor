@@ -565,6 +565,27 @@ const BLDG_LINK_RULES = [
   },
 ];
 
+// HOMESの建物ページには、対象ビルとは無関係な「周辺の募集中物件」の
+// chintai/roomリンクも最大10件載る。リンクの存在だけでは判定せず、
+// 対象ビルの「募集中 N 件」表示を正として、その件数分だけ採用する。
+// 募集中件数の表示がない旧形式ページは、誤通知防止を優先して0件扱いにする。
+function extractBuildingListingLinks(rule, res) {
+  const allLinks = [...new Set(
+    (res.links || []).filter(h => rule.pattern.test(h)).map(rule.clean)
+  )];
+  if (rule.site !== 'HOMES') return allLinks;
+
+  const bodyText = res.bodyText || '';
+  if (/当サイト内で募集中の部屋情報はありません/.test(bodyText)) return [];
+
+  const countMatch = bodyText.match(/募集中\s*(\d+)\s*件/);
+  if (!countMatch) return [];
+
+  const activeCount = Number(countMatch[1]);
+  if (!Number.isFinite(activeCount) || activeCount <= 0) return [];
+  return allLinks.slice(0, activeCount);
+}
+
 async function checkBuildingPages(item, page) {
   const candidateUrls = []; // 募集中物件の個別URL（空室確認に回す）
 
@@ -576,7 +597,7 @@ async function checkBuildingPages(item, page) {
       logger.info(`ビルページ(${rule.site}): 取得不可（チャレンジ/エラー）→ ${item.name}`);
       continue;
     }
-    const found = [...new Set(res.links.filter(h => rule.pattern.test(h)).map(rule.clean))];
+    const found = extractBuildingListingLinks(rule, res);
     candidateUrls.push(...found);
     if (found.length > 0) logger.info(`ビルページ(${rule.site}): 募集リンク${found.length}件 → ${item.name}`);
   }
@@ -875,4 +896,4 @@ if (require.main === module) {
 }
 
 // テスト用エクスポート
-module.exports = { checkBuildingPages, checkVacancyActive };
+module.exports = { checkBuildingPages, checkVacancyActive, extractBuildingListingLinks, BLDG_LINK_RULES };
