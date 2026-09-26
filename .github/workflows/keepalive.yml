@@ -1,0 +1,29 @@
+name: Keepalive
+
+# GitHub は 60 日間リポジトリに動きがないと、定期実行のワークフローを自動停止する。
+# 2026-09-08 に Rental Watcher がこれで止まり、19 日間 Discord 通知が途絶えた。
+# 月 1 回 API で有効化し直して、停止までのタイマーを戻す。コミットは作らない。
+# 自分自身も同じ理由で止まるので、自分も有効化し直す。
+
+on:
+  schedule:
+    - cron: '0 3 1 * *'   # 毎月1日 JST 12:00
+  workflow_dispatch:       # 手動実行
+
+permissions:
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Re-enable scheduled workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wf in rental-watcher.yml keepalive.yml; do
+            gh api -X PUT "repos/${{ github.repository }}/actions/workflows/$wf/enable"
+            state=$(gh api "repos/${{ github.repository }}/actions/workflows/$wf" --jq .state)
+            echo "$wf: $state"
+          done
