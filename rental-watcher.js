@@ -687,6 +687,12 @@ const PER_RUN_MAX = Math.floor(
 // 現状: 2時間毎 × batchTotal=2 → 各batchは1日6回実行）
 const RUNS_PER_DAY_PER_BATCH = 6;
 
+// ワークフローの timeout-minutes は 45。セットアップと後片付けの余裕を見て、
+// 開始から この分数を過ぎたら新しい物件には手を付けずに終える。
+// 打ち切られると完了レポートが届かず、処理途中の状態も分からなくなるため。
+// 残りは「最終チェックが古い順」のソートで次回の先頭に来るので取りこぼさない。
+const TIME_BUDGET_MIN = 38;
+
 async function main() {
   const startTime = Date.now();
   logger.info('処理開始');
@@ -742,8 +748,15 @@ async function main() {
   let buildingPagesChecked    = 0;
   let buildingCandidatesTotal = 0;
   let knownUrlsChecked        = 0;
+  let notifyFailures          = 0;
+  let timeCapped              = false;
 
   for (const item of monitoringList) {
+    if ((Date.now() - startTime) / 60000 > TIME_BUDGET_MIN) {
+      timeCapped = true;
+      logger.info(`時間上限（${TIME_BUDGET_MIN}分）に達したため ${processedCount}/${monitoringList.length}件で終了。残りは次回`);
+      break;
+    }
     const buildingForQuery = (item.building || '').replace(/\s*\d+号室.*$/, '').trim();
     const addrForQuery = (item.address || '').replace(/^東京都/, '').trim();
     const query = [addrForQuery, buildingForQuery, '賃貸'].filter(Boolean).join(' ');
@@ -802,8 +815,22 @@ async function main() {
 
     logger.info(`"${item.name}" 検索:${foundUrls.length}件 除外後:${portalFiltered.length}件 候補:${candidates.length}件 ビルページ候補:${bldgCandidates.length}件 新着:${trulyNew.length}件`);
 
+    // 新着は見つけたその場で通知する。
+    // 以前は全件処理の最後にまとめて送っていたため、45分のタイムアウトで打ち切られると
+    // 通知されないまま下の既知URLに書き込まれ、二度と通知されなかった（2026-09-27 判明）。
+    // 通知に失敗した URL は既知に入れず、次回もう一度見つけて通知させる。
+    let notified = [];
     if (trulyNew.length > 0) {
-      allNewItems.push({ name: item.name, address: item.address, building: item.building, urls: trulyNew });
+      const entry = { name: item.name, address: item.address, building: item.building, urls: trulyNew };
+      try {
+        await sendDiscordNotification([entry], discordWebhookUrl);
+        notified = trulyNew;
+        allNewItems.push(entry);
+        logger.info(`Discord通知完了: ${item.name}（${trulyNew.length}件）`);
+      } catch (err) {
+        notifyFailures++;
+        logger.error(`Discord通知失敗（既知に入れず次回再通知）: ${item.name} ${err.message}`);
+      }
     }
 
     // ポータル除外ドメインに一致するものを既知リストからもクリーンアップする
@@ -827,7 +854,7 @@ async function main() {
     }
 
     // 処理完了ごとに即時スプシ更新（重複を排除し、最大保持数に切り詰める）
-    const updatedKnownUrls = [...new Set([...revalidatedKnownUrls, ...trulyNew])].slice(-maxKnownUrls);
+    const updatedKnownUrls = [...new Set([...revalidatedKnownUrls, ...notified])].slice(-maxKnownUrls);
     await updateSheet(sheets, spreadsheetId, [{
       sheetRow:  item.sheetRow,
       knownUrls: updatedKnownUrls.join(', '),
@@ -839,18 +866,8 @@ async function main() {
     await new Promise(r => setTimeout(r, searchDelay));
   }
 
-  // Discord 通知（新着物件）
-  if (allNewItems.length > 0) {
-    logger.info(`新着${allNewItems.length}件 → Discord通知送信`);
-    try {
-      await sendDiscordNotification(allNewItems, discordWebhookUrl);
-      logger.info(`Discord通知完了`);
-    } catch (err) {
-      logger.error(`Discord通知失敗: ${err.message}`);
-    }
-  } else {
-    logger.info(`新着なし、通知スキップ`);
-  }
+  // 新着の Discord 通知はループ内で1件ずつ送信済み
+  logger.info(allNewItems.length > 0 ? `新着${allNewItems.length}件（通知済み）` : `新着なし`);
 
   logger.info(`スプレッドシート更新完了（逐次）`);
 
@@ -872,10 +889,14 @@ async function main() {
     if (processedCount > 0 && itemsWithSearchResults === 0) {
       warnings.push('⚠️ 検索結果が全件0件: 検索エンジン取得障害の可能性');
     }
+    if (notifyFailures > 0) {
+      warnings.push(`⚠️ Discord通知失敗 ${notifyFailures}件（既知に入れていないので次回再通知）`);
+    }
 
     const lines = [
       `ジョブ: ${batchIndex + 1}/${batchTotal}`,
-      `処理件数: 未チェック期間が長い順に${monitoringList.length}件 / 全${fullList.length}件`,
+      `処理件数: ${processedCount}/${monitoringList.length}件（未チェック期間が長い順）/ 全${fullList.length}件`,
+      ...(timeCapped ? [`⏱ 時間上限${TIME_BUDGET_MIN}分で打ち切り。残り${monitoringList.length - processedCount}件は次回`] : []),
       `検索取得: ${itemsWithSearchResults}/${processedCount}件で結果あり（合計${totalSearchResults}URL）`,
       `ビルページ: ${buildingPagesChecked}件確認 / 新規候補${buildingCandidatesTotal}URL`,
       `既知URL再確認: ${knownUrlsChecked}URL`,
