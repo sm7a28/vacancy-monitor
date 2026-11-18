@@ -1,0 +1,42 @@
+# 新しい監視を作るための下調べ（アットホームの種目・地域のURLの書き方を調べる）。手動実行のみ。
+# 結果はURLの一覧と件数だけをログに出す。通知・保存はしない。作り終えたら消す。
+name: new-monitor-probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: アットホームのURLを調べる
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+          get() { curl -s -L -A "$UA" -H "Accept-Language: ja" -o p.html -w "%{http_code}" "$1"; }
+          show() {
+            code=$(get "$1")
+            n=$(grep -o -E 'href="[^"]*/rent_[a-z]+/[0-9]{6,}/' p.html | sort -u | wc -l)
+            ch=$(grep -c "認証にご協力" p.html || true)
+            sy=$(grep -o -E 'area-title__syumoku">[^<]*' p.html | sed 's/.*">//' | sort | uniq -c | tr '\n' ' ')
+            echo "URL=$1 HTTP=$code 物件=$n 認証=$ch 種目=[$sy]"
+          }
+          code=$(get "https://www.athome.co.jp/")
+          echo "== トップの事業用リンク (HTTP=$code)"
+          grep -o -E 'href="[^"]*/(rent|buy)_[a-z_]+/[^"]*"' p.html | sort -u | head -40
+          sleep 12
+          for u in \
+            "https://www.athome.co.jp/rent_store/tokyo/list/?sort=33" \
+            "https://www.athome.co.jp/rent_shop/tokyo/list/?sort=33" \
+            "https://www.athome.co.jp/rent_warehouse/tokyo/list/?sort=33" \
+            "https://www.athome.co.jp/rent_soko/tokyo/list/?sort=33" \
+            "https://www.athome.co.jp/rent_office/tokyo/list/?sort=33&limit=50" ; do
+            show "$u"; sleep 12
+          done
+          code=$(get "https://www.athome.co.jp/rent_office/kanagawa/list/?sort=33")
+          echo "== 神奈川の地域リンク (HTTP=$code)"
+          grep -o -E 'href="[^"]*/rent_office/kanagawa/[a-z0-9-]+/list/"' p.html | sort -u | head -80
+          sleep 12
+          code=$(get "https://www.athome.co.jp/rent_office/tokyo/list/?sort=33")
+          echo "== 東京の地域リンク (HTTP=$code)"
+          grep -o -E 'href="[^"]*/rent_office/tokyo/[a-z0-9-]+/list/"' p.html | sort -u | head -80
