@@ -1,0 +1,28 @@
+# アットホームの検索一覧ページをクラウド（GitHub Actions）から取得できるかを1回だけ確かめるテスト。
+# 通知・API・秘密情報は使わない。結果はこのワークフローのログにだけ出る。手動実行のみ。
+name: athome-fetch-test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 一覧ページを取得
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+          for u in \
+            "https://www.athome.co.jp/rent_office/tokyo/list/" \
+            "https://www.athome.co.jp/rent_office/tokyo/shibuya-city/list/" \
+            "https://www.athome.co.jp/rent_office/tokyo/kinshicho-st/list/"; do
+            code=$(curl -s -L -A "$UA" -H "Accept-Language: ja" -o page.html -w "%{http_code}" "$u")
+            title=$(grep -o -E "<title>[^<]*</title>" page.html | head -1)
+            links=$(grep -o -E 'href="[^"]*/rent_office/[0-9]+/' page.html | sort -u | wc -l)
+            challenge=$(grep -c -i -E "captcha|認証にご協力|verify" page.html || true)
+            echo "URL=$u"
+            echo "  HTTP=$code SIZE=$(wc -c < page.html) 物件リンク=$links 認証画面の語=$challenge"
+            echo "  $title"
+            sleep 10
+          done
