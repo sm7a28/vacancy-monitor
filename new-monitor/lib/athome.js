@@ -5,19 +5,26 @@
 const { getText, sleep, nfkc, stripTags, parseYen, parseArea, parseAddress } = require('./util');
 
 const MAX_REQUESTS = 4;
-// 家賃20万円以下・駅徒歩10分以内（URLの項目。効いているかは run.js で結果から確かめる）
-const FILTER = 'PRICETO=kc603&EKITOHO=ke004&sort=33';
+// URLの形は、保存した検索条件（倉庫）を開いたときの本物のURLにそろえる（2026-11-19 確認）。
+// basic=kc501（下限なし）,kc603（20万円以下）,kt223（10㎡以上）,kf101,ke004（徒歩10分以内）,kn001,kj001
+// 効いているかは run.js で結果から確かめる（overPrice・overWalk・underArea）。
+const BASIC = 'kc501,kc603,kt223,kf101,ke004,kn001,kj001';
+// 東京都：葛飾区・江戸川区（荒川より東）を除く23区と多摩の市
+const TOKYO_CITIES = 'chiyoda,chuo,minato,shinjuku,bunkyo,taito,sumida,koto,shinagawa,meguro,ota,setagaya,shibuya,nakano,suginami,toshima,kita,arakawa,itabashi,nerima,adachi,hachioji,tachikawa,musashino,mitaka,ome,tokyo_fuchu,akishima,chofu,machida,koganei,kodaira,hino,higashimurayama,kokubunji,kunitachi,fussa,komae,higashiyamato,kiyose,higashikurume,musashimurayama,tama,inagi,hamura,akiruno,nishitokyo';
+const TOKYO_CDS = '13101,13102,13103,13104,13105,13106,13107,13108,13109,13110,13111,13112,13113,13114,13115,13116,13117,13118,13119,13120,13121,13201,13202,13203,13204,13205,13206,13207,13208,13209,13210,13211,13212,13213,13214,13215,13218,13219,13220,13221,13222,13223,13224,13225,13227,13228,13229';
+const tokyoQ = `pref=13&cities=${TOKYO_CITIES}&cityCds=${TOKYO_CDS}&basic=${BASIC}&tsubo=0&tanka=0&kod=&q=1&sort=33`;
+const kanagawaQ = `pref=14&basic=${BASIC}&tsubo=0&tanka=0&kod=&q=1&sort=33`;
 
 const TOKYO = [
-  { key: 'athome-office-tokyo', url: `https://www.athome.co.jp/rent_office/tokyo/list/?${FILTER}` },
-  { key: 'athome-store-tokyo', url: `https://www.athome.co.jp/rent_store/tokyo/list/?${FILTER}` },
-  { key: 'athome-souko-tokyo', url: `https://www.athome.co.jp/rent_souko/tokyo/list/?${FILTER}` },
+  { key: 'athome2-office-tokyo', url: `https://www.athome.co.jp/rent_office/tokyo/list/?${tokyoQ}` },
+  { key: 'athome2-store-tokyo', url: `https://www.athome.co.jp/rent_store/tokyo/list/?${tokyoQ}` },
+  { key: 'athome2-souko-tokyo', url: `https://www.athome.co.jp/rent_souko/tokyo/list/?${tokyoQ}` },
 ];
 // 神奈川は1回に1種類ずつ順番に回す（回数の上限のため）
 const KANAGAWA = [
-  { key: 'athome-office-kanagawa', url: `https://www.athome.co.jp/rent_office/kanagawa/list/?${FILTER}` },
-  { key: 'athome-store-kanagawa', url: `https://www.athome.co.jp/rent_store/kanagawa/list/?${FILTER}` },
-  { key: 'athome-souko-kanagawa', url: `https://www.athome.co.jp/rent_souko/kanagawa/list/?${FILTER}` },
+  { key: 'athome2-office-kanagawa', url: `https://www.athome.co.jp/rent_office/kanagawa/list/?${kanagawaQ}` },
+  { key: 'athome2-store-kanagawa', url: `https://www.athome.co.jp/rent_store/kanagawa/list/?${kanagawaQ}` },
+  { key: 'athome2-souko-kanagawa', url: `https://www.athome.co.jp/rent_souko/kanagawa/list/?${kanagawaQ}` },
 ];
 
 function plan(runIndex) {

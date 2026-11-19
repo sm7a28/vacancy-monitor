@@ -109,6 +109,7 @@ async function main() {
         // URLの絞り込み（20万円以下・徒歩10分以内）が効いているかを結果で確かめる
         src.overPrice = res.items.filter((x) => x.rent > 200000).length;
         src.overWalk = res.items.filter((x) => (x.stations[0] || {}).walk > 10).length;
+        src.underArea = res.items.filter((x) => x.area < 10).length;
         const pref = /kanagawa/.test(res.key) ? 'kanagawa' : 'tokyo';
         for (const x of res.items) consider({ ...x, pref }, res.key, seeding);
         if (!seeding && res.items.length > 0 && src.fresh === res.items.length) src.mayHaveGap = true;
@@ -130,7 +131,7 @@ async function main() {
       const { t, pass } = queue.shift();
       const b = (t.href.match(/b-(\d+)/) || [])[1];
       if (!b) continue;
-      if (pass === 2 && queue.every((q) => q.pass === 2) && !src._waited) { src._waited = true; await sleep(30000); }
+      if (pass === 2 && queue.every((q) => q.pass === 2) && !src._waited) { src._waited = true; await sleep(60000); }
       let j = null;
       for (let attempt = 0; attempt < 2 && !j; attempt++) {
         if (attempt) await sleep(8000);
@@ -164,7 +165,7 @@ async function main() {
         }
       }
       state.homes[b] = { rooms: urls, d: d0, building: j.building };
-      await sleep(3000);
+      await sleep(6000);
     }
     delete src._waited;
   }
