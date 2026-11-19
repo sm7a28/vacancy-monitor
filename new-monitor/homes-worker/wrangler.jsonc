@@ -1,0 +1,8 @@
+{
+  // 新しい監視：HOMES の建物ページを取って「募集中の部屋」の欄だけ返す Worker。
+  // 合言葉は Worker の secret（NM_HOMES_TOKEN）。値はリポジトリに置かない。
+  "name": "nm-homes-fetch",
+  "main": "src/index.js",
+  "compatibility_date": "2025-06-01",
+  "workers_dev": true
+}

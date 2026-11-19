@@ -10,3 +10,9 @@ scratch/
 *.xlsx
 register-task.ps1
 null
+
+# 新しい監視の暗号鍵（GitHub Secrets の NM_KEY と同じもの）
+new-monitor/.secrets/
+# 新しい監視の既読の記録（GitHub Actions のキャッシュに置く）と手元の試し
+new-monitor/state/
+new-monitor/results-local/
