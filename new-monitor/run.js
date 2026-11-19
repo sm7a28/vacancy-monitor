@@ -110,7 +110,9 @@ async function main() {
         summary.sources[k].hit = r.hit;
         summary.sources[k].pageLog = r.log;
         const pref = s.ta === 14 ? 'kanagawa' : 'tokyo';
-        for (const x of r.rooms) consider({ ...x, pref }, k, seeding);
+        // 掲載日：一覧には載っていない。「本日の新着」で見つけたものはその日に載ったもの
+        const posted = m.recent ? '2〜7日前（SUUMO の新着2〜7日前）' : `${jstDate().slice(5).replace('-', '/')}（SUUMO の本日の新着）`;
+        for (const x of r.rooms) consider({ ...x, pref, posted }, k, seeding);
         const last = r.log[r.log.length - 1];
         if (last && last.rooms > 0 && r.log.length >= (m.recent ? 45 : 20)) summary.sources[k].mayHaveGap = true;
         state.seeded[k] = true;
@@ -133,7 +135,12 @@ async function main() {
         src.overWalk = res.items.filter((x) => (x.stations[0] || {}).walk > 10).length;
         src.underArea = res.items.filter((x) => x.area < 10).length;
         const pref = /kanagawa/.test(res.key) ? 'kanagawa' : 'tokyo';
-        for (const x of res.items) consider({ ...x, pref }, res.key, seeding);
+        // 掲載日：一覧には載っていない。新着順の上から読んでいるので、初めて見たものは前回この一覧を読んだ後に載ったもの
+        state.lastAt = state.lastAt || {};
+        const prevAt = state.lastAt[res.key];
+        const posted = prevAt ? `${prevAt.slice(5).replace('-', '/')}〜${summary.at.slice(5).replace('-', '/')} の間（アットホーム新着順）` : '';
+        for (const x of res.items) consider({ ...x, pref, posted }, res.key, seeding);
+        if (res.items.length > 0 && !res.blocked) state.lastAt[res.key] = summary.at;
         if (!seeding && res.items.length > 0 && src.fresh === res.items.length) src.mayHaveGap = true;
         if (res.items.length > 0) state.seeded[res.key] = true;
       }

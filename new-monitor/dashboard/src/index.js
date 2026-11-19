@@ -25,6 +25,7 @@ async function ensureSchema(db) {
   for (const s of SCHEMA) await db.prepare(s).run();
   // 後から足した列（あれば何もしない）
   try { await db.prepare('ALTER TABLE listings ADD COLUMN images TEXT').run(); } catch { /* 追加済み */ }
+  try { await db.prepare('ALTER TABLE listings ADD COLUMN posted TEXT').run(); } catch { /* 追加済み */ }
   schemaReady = true;
 }
 
@@ -70,7 +71,7 @@ function row(ev, at) {
       rent: 0, admin: 0, total: 0, area: parseFloat(r.area) || null, tsubo: 0, floor: r.floor, madori: r.madori,
       tags: JSON.stringify([r.rent, r.admin ? `管理費 ${r.admin}` : ''].filter(Boolean)),
       match_reason: 'HOMES の建物ページに新しい募集', building: JSON.stringify({ name: ev.buildingName, url: ev.buildingUrl, key: ev.buildingKey || '', spaces: ev.spaces || [] }),
-      url: r.url, map_url: '', salon_url: '', also_on: '', price_drop: '', relist: 0, text: ev.text || '', images: '[]', at,
+      url: r.url, map_url: '', salon_url: '', also_on: '', price_drop: '', relist: 0, text: ev.text || '', images: '[]', posted: '', at,
     };
   }
   const x = ev.listing || {};
@@ -89,7 +90,7 @@ function row(ev, at) {
     building: bInfo ? JSON.stringify(bInfo) : '',
     url: x.url || '', map_url: ev.mapUrl || '', salon_url: ev.salonUrl || '', also_on: ev.alsoOn || '',
     price_drop: ev.priceDrop ? JSON.stringify(ev.priceDrop) : '', relist: ev.relist ? 1 : 0, text: ev.text || '',
-    images: JSON.stringify((x.images || []).filter((u) => /^https:\/\//.test(u)).slice(0, 4)), at,
+    images: JSON.stringify((x.images || []).filter((u) => /^https:\/\//.test(u)).slice(0, 4)), posted: x.posted || '', at,
   };
 }
 
@@ -103,12 +104,12 @@ async function ingest(request, env) {
     const r = row(ev, at);
     if (!r.id) continue;
     stmts.push(env.DB.prepare(
-      `INSERT INTO listings (id, site, type, first_seen, last_event, label, tier, notify, title, kind, address, stations, rent, admin, total, area, tsubo, floor, madori, tags, match_reason, building, url, map_url, salon_url, also_on, price_drop, relist, text, images)
-       VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)
+      `INSERT INTO listings (id, site, type, first_seen, last_event, label, tier, notify, title, kind, address, stations, rent, admin, total, area, tsubo, floor, madori, tags, match_reason, building, url, map_url, salon_url, also_on, price_drop, relist, text, images, posted)
+       VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30)
        ON CONFLICT(id) DO UPDATE SET last_event = ?4, total = ?14, rent = ?12, admin = ?13, price_drop = CASE WHEN ?26 <> '' THEN ?26 ELSE price_drop END,
          relist = MAX(relist, ?27), also_on = CASE WHEN ?25 <> '' THEN ?25 ELSE also_on END, text = ?28,
          images = CASE WHEN ?29 <> '[]' THEN ?29 ELSE images END, building = CASE WHEN ?21 <> '' THEN ?21 ELSE building END`,
-    ).bind(r.id, r.site, r.type, at, r.label, r.tier, r.notify, r.title, r.kind, r.address, r.stations, r.rent, r.admin, r.total, r.area, r.tsubo, r.floor, r.madori, r.tags, r.match_reason, r.building, r.url, r.map_url, r.salon_url, r.also_on, r.price_drop, r.relist, r.text, r.images));
+    ).bind(r.id, r.site, r.type, at, r.label, r.tier, r.notify, r.title, r.kind, r.address, r.stations, r.rent, r.admin, r.total, r.area, r.tsubo, r.floor, r.madori, r.tags, r.match_reason, r.building, r.url, r.map_url, r.salon_url, r.also_on, r.price_drop, r.relist, r.text, r.images, r.posted));
   }
   for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   return Response.json({ ok: true, saved: stmts.length - 1 });
@@ -186,7 +187,8 @@ function card(r) {
   const price = r.type === 'homes' ? '' : `<span class="price">${man(r.total)}</span>（${man(r.rent)}＋${man(r.admin)}）／${r.area ?? '-'}㎡／坪${man(r.tsubo)}`;
   const st = (v, txt) => `<button class="${r.status === v ? 'on' : ''}" data-id="${esc(r.id)}" data-v="${v}">${txt}</button>`;
   return `<div class="card${r.status === 'skip' ? ' dim' : ''}"><div class="row">${thumbs}<div class="body">
-    <div class="top">${siteBadge(r.site)}${labelBadge(r)}<span class="t">${esc(r.title || r.kind || '（建物名なし）')}</span><span class="meta">${esc(r.first_seen)}</span></div>
+    <div class="top">${siteBadge(r.site)}${labelBadge(r)}<span class="t">${esc(r.title || r.kind || '（建物名なし）')}</span></div>
+    <div class="meta">掲載 ${esc(r.posted || '不明')}　見つけた ${esc(String(r.first_seen || '').slice(5).replace('-', '/'))}</div>
     <div class="meta">${esc(r.kind)} ${esc(r.address)} ${esc(r.stations)}</div>
     <div>${price} ${esc(r.floor || '')} ${esc(r.madori || '')}</div>
     ${r.match_reason ? `<div class="reason">${esc(r.match_reason)}</div>` : ''}

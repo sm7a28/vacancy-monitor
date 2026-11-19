@@ -29,6 +29,7 @@ function format(ev) {
     lines.push(`${x.kind || ''} ${x.address || ''}`.trim());
     lines.push(`${stationLine(x)}`);
     lines.push(`家賃 ${man(x.rent)}＋管理費等 ${man(x.admin)}＝${man(ev.judge.total)}／${x.area}㎡／坪 ${man(ev.judge.tsubo)}${x.floor ? `／${x.floor}` : ''}${x.madori ? `／${x.madori}` : ''}`);
+    if (x.posted) lines.push(`掲載：${x.posted}`);
     if (ev.judge.tags.length) lines.push(`メモ：${ev.judge.tags.join('・')}`);
     if (ev.match && ev.match.reason) lines.push(`照合：${ev.match.reason}`);
     if (ev.match && ev.match.building) {
