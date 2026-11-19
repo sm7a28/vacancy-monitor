@@ -4,12 +4,8 @@
 name: new-monitor
 
 on:
-  schedule:
-    # JST 8:05 / 12:05 / 15:05 / 18:05（毎時0分は混むので5分ずらす）
-    - cron: '5 23 * * *'
-    - cron: '5 3 * * *'
-    - cron: '5 6 * * *'
-    - cron: '5 9 * * *'
+  # 定時の起動は Cloudflare の Worker nm-dashboard の Cron（JST 8:05/12:05/15:05/18:05）から行う。
+  # GitHub の定時実行は混むと大きく遅れる・抜けるため使わない（2026-11-19）
   workflow_dispatch:
 
 concurrency:
