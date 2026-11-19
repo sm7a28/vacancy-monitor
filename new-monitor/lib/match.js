@@ -73,4 +73,22 @@ function matchListing(x, buildings) {
   return { label: '', building: null, reason: '' };
 }
 
-module.exports = { normName, baseName, matchListing };
+// 問い合わせ履歴との照合。同じ募集（URL）か、同じ建物（名前＋丁目）なら返す
+function urlKey(u) {
+  const m = String(u || '').match(/(jnc_\d+|bc_\d+|rent_[a-z]+\/\d+|room\/[0-9a-f]+)/);
+  return m ? m[1].replace(/^rent_[a-z]+\//, 'athome:') : '';
+}
+function matchInquiry(x, inquiries) {
+  const k = urlKey(x.url);
+  const nm = normName(x.name);
+  for (const q of inquiries || []) {
+    if (k && urlKey(q.url) === k) return { same: 'listing', q };
+  }
+  for (const q of inquiries || []) {
+    const qn = normName(String(q.name || '').replace(/\s*(B?\d+階|B\d+).*$/, ''));
+    if (nm && qn && nm.length >= 2 && qn === nm && (!q.addr || !q.addr.ward || sameChome(q.addr, x.addr || {}))) return { same: 'building', q };
+  }
+  return null;
+}
+
+module.exports = { normName, baseName, matchListing, matchInquiry };

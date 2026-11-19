@@ -10,7 +10,7 @@ const { sleep, getText, jstStamp, jstDate, chomeKey } = require('./lib/util');
 const suumo = require('./lib/suumo');
 const athome = require('./lib/athome');
 const { judge } = require('./lib/area');
-const { matchListing } = require('./lib/match');
+const { matchListing, matchInquiry } = require('./lib/match');
 const notify = require('./lib/notify');
 
 const DIR = __dirname;
@@ -80,6 +80,8 @@ async function main() {
       else if (d0 - prev.d >= 3) { ev.relist = true; }
     }
     if (fp) state.fps[fp] = { id: x.id, site: x.site, url: x.url, d: d0 };
+    const inq = matchInquiry(x, cand.inquiries);
+    if (inq) { ev.inquired = { same: inq.same, asked: inq.q.asked, result: inq.q.result }; j.tags.unshift(inq.same === 'listing' ? `問い合わせ済み（${inq.q.asked}：${inq.q.result}）` : `同じ建物に問い合わせ済み（${inq.q.asked}：${inq.q.result}）`); }
     ev.mapUrl = notify.mapLink(x);
     ev.salonUrl = salonUrl(x);
     ev.label = ev.match.label || '';
@@ -180,7 +182,8 @@ async function main() {
         for (const room of j.rooms) {
           if (!prev.rooms.includes(room.url)) {
             src.newRooms++;
-            events.push({ type: 'homes', source: 'homes', label: '実績ビル', buildingKey: t.key, buildingName: t.name, buildingUrl: t.href, room, building: j.building });
+            const inq = matchInquiry({ url: room.url, name: t.name, addr: {} }, cand.inquiries);
+            events.push({ type: 'homes', source: 'homes', label: '実績ビル', buildingKey: t.key, buildingName: t.name, buildingUrl: t.href, room, building: j.building, inquired: inq ? { same: inq.same, asked: inq.q.asked, result: inq.q.result } : undefined });
           }
         }
       }

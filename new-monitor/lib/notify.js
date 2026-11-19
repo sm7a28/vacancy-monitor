@@ -22,6 +22,7 @@ function format(ev) {
     lines.push(`${ev.room.floor} ${ev.room.area} ${ev.room.madori} ${ev.room.rent}（管理費 ${ev.room.admin || '-'}）`);
     lines.push(ev.room.url);
     lines.push(`建物ページ：${ev.buildingUrl}`);
+    if (ev.inquired) lines.push(`${ev.inquired.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${ev.inquired.asked}：${ev.inquired.result}）`);
   } else {
     lines.push(`${x.kind || ''} ${x.address || ''}`.trim());
     lines.push(`${stationLine(x)}`);

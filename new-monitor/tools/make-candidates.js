@@ -75,6 +75,12 @@ try {
   }
 } catch (e) { console.log('駅コードの表が読めませんでした', e.message); }
 
+// 問い合わせ履歴（outputs/inquiries.json）。同じ物件・同じ建物の募集に印を付ける
+let inquiries = [];
+try {
+  inquiries = JSON.parse(fs.readFileSync(path.join(ROOT, 'outputs', 'inquiries.json'), 'utf8')).inquiries.map((q) => ({ ...q, addr: parseAddress(q.address || '') }));
+} catch (e) { console.log('問い合わせ履歴が読めませんでした', e.message); }
+
 const key = loadKey();
-writeEnc(path.join(__dirname, '..', 'data', 'candidates.json.enc'), { savedAt: new Date().toISOString(), buildings, homesTargets, stationCodes }, key);
-console.log(`候補の建物 ${buildings.length} 棟（名前で照合できるもの ${buildings.filter((b) => !b.nameIsAddress).length}）、HOMES の監視対象 ${homesTargets.length} 棟、駅コード ${Object.keys(stationCodes).length} 駅`);
+writeEnc(path.join(__dirname, '..', 'data', 'candidates.json.enc'), { savedAt: new Date().toISOString(), buildings, homesTargets, stationCodes, inquiries }, key);
+console.log(`候補の建物 ${buildings.length} 棟（名前で照合できるもの ${buildings.filter((b) => !b.nameIsAddress).length}）、HOMES の監視対象 ${homesTargets.length} 棟、駅コード ${Object.keys(stationCodes).length} 駅、問い合わせ履歴 ${inquiries.length} 件`);
