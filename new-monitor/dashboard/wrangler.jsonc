@@ -1,6 +1,6 @@
 {
   // 新しい監視のダッシュボード。合言葉・トークンは secret（NM_DASH_TOKEN・GH_DISPATCH_TOKEN）。値はリポジトリに置かない。
-  // 画面は Cloudflare Access で守る（ACCESS_TEAM_DOMAIN・ACCESS_AUD を vars に入れるまで画面は 403）。
+  // 画面はメールのログインリンクで守る（SESSION_SECRET・ALLOWED_EMAILS は secret）。
   "name": "nm-dashboard",
   "main": "src/index.js",
   "compatibility_date": "2025-06-01",
@@ -9,5 +9,8 @@
   "d1_databases": [{ "binding": "DB", "database_name": "nm-dashboard", "database_id": "e80a8b60-8144-467f-b1b9-cc7dde3ba02d" }],
   // JST 8:05 / 12:05 / 15:05 / 18:05 に GitHub の巡回を起動する
   "triggers": { "crons": ["5 23,3,6,9 * * *"] },
-  "vars": { "ACCESS_TEAM_DOMAIN": "", "ACCESS_AUD": "" }
+  // ログインリンクのメール（Email Routing の送信。宛先は Email Routing で確認済みのアドレスだけ）
+  "send_email": [{ "name": "MAIL" }],
+  // 許可するメールアドレスは secret の ALLOWED_EMAILS（公開リポジトリに書かない）
+  "vars": { "MAIL_FROM": "noreply@sevenart-projects.com", "ACCESS_TEAM_DOMAIN": "", "ACCESS_AUD": "" }
 }

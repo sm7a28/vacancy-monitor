@@ -1,10 +1,14 @@
 // 新しい監視のダッシュボード（bukken.sevenart-projects.com）。
 // - 巡回の結果を受け取って D1 に保存する（POST /api/ingest、合言葉 NM_DASH_TOKEN）
-// - 一覧を見る画面（Cloudflare Access で守る。Access を通っていない読み込みには答えない）
+// - 一覧を見る画面（メールのログインリンクで入る。許可するアドレスは ALLOWED_EMAILS。クッキーの署名は SESSION_SECRET）
+//   ログインリンクは Cloudflare Email Routing の送信（send_email）で送る。鍵は要らない
 // - 検討／見送りの印（POST /api/status）
 // - 定時に GitHub の巡回を起動する（GitHub の定時実行は大きく遅れるため。GH_DISPATCH_TOKEN）
+import { EmailMessage } from 'cloudflare:email';
 
 const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS login_tokens (token TEXT PRIMARY KEY, email TEXT, exp INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS login_log (k TEXT, at INTEGER)`,
   `CREATE TABLE IF NOT EXISTS listings (
     id TEXT PRIMARY KEY, site TEXT, type TEXT, first_seen TEXT, last_event TEXT,
     label TEXT, tier TEXT, notify INTEGER, title TEXT, kind TEXT, address TEXT, stations TEXT,
@@ -225,13 +229,99 @@ async function dispatch(env) {
   return { ok: r.status === 204, status: r.status };
 }
 
+// ---- メールのログインリンク ----
+const COOKIE = 'nm_session';
+const SESSION_DAYS = 30;
+const allowed = (env) => String(env.ALLOWED_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+async function hmac(secret, data) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return hex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data)));
+}
+async function sessionUser(request, env) {
+  if (!env.SESSION_SECRET) return null;
+  const c = (request.headers.get('cookie') || '').split(/;\s*/).find((x) => x.startsWith(`${COOKIE}=`));
+  if (!c) return null;
+  const [email, exp, sig] = decodeURIComponent(c.slice(COOKIE.length + 1)).split('|');
+  if (!email || !exp || !sig || parseInt(exp, 10) < Date.now() / 1000) return null;
+  if (sig !== (await hmac(env.SESSION_SECRET, `${email}|${exp}`))) return null;
+  return allowed(env).includes(email) ? email : null;
+}
+const b64 = (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+async function sendLoginMail(env, to, link) {
+  const from = env.MAIL_FROM || 'noreply@sevenart-projects.com';
+  const body = `物件監視のダッシュボードにログインするリンクです（15分有効・1回限り）。\n\n${link}\n\n心当たりがない場合は、このメールを無視してください。\n`;
+  const raw = [
+    `From: =?UTF-8?B?${b64('物件監視')}?= <${from}>`,
+    `To: <${to}>`,
+    `Subject: =?UTF-8?B?${b64('【物件監視】ログインリンク')}?=`,
+    `Message-ID: <${crypto.randomUUID()}@sevenart-projects.com>`,
+    `Date: ${new Date().toUTCString()}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    b64(body).replace(/(.{76})/g, '$1\r\n'),
+  ].join('\r\n');
+  await env.MAIL.send(new EmailMessage(from, to, raw));
+}
+function loginHtml(msg) {
+  return new Response(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>物件監視</title><style>${CSS}.box{max-width:380px;margin:60px auto;padding:0 16px}.box input,.box button{font:inherit;width:100%;padding:8px;margin-top:8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}.box button{background:var(--ink);color:var(--bg);cursor:pointer}</style></head><body><div class="box"><h1>物件監視</h1>${msg ? `<p>${esc(msg)}</p>` : ''}<form method="post" action="/login"><input type="email" name="email" placeholder="メールアドレス" autocomplete="email" required><button>ログインリンクを送る</button></form></div></body></html>`, { headers: { 'content-type': 'text/html; charset=utf-8', 'x-robots-tag': 'noindex', 'cache-control': 'no-store' } });
+}
+async function postLogin(request, env) {
+  await ensureSchema(env.DB);
+  const form = await request.formData();
+  const email = String(form.get('email') || '').trim().toLowerCase();
+  const ip = request.headers.get('cf-connecting-ip') || '';
+  const now = Math.floor(Date.now() / 1000);
+  // 送りすぎを防ぐ：同じアドレスは1分に1回、同じ接続元は1時間に10回まで
+  const recentEmail = await env.DB.prepare('SELECT COUNT(*) n FROM login_log WHERE k = ? AND at > ?').bind(`e:${email}`, now - 60).first();
+  const recentIp = await env.DB.prepare('SELECT COUNT(*) n FROM login_log WHERE k = ? AND at > ?').bind(`i:${ip}`, now - 3600).first();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO login_log (k, at) VALUES (?, ?)').bind(`e:${email}`, now),
+    env.DB.prepare('INSERT INTO login_log (k, at) VALUES (?, ?)').bind(`i:${ip}`, now),
+    env.DB.prepare('DELETE FROM login_log WHERE at < ?').bind(now - 86400),
+    env.DB.prepare('DELETE FROM login_tokens WHERE exp < ?').bind(now),
+  ]);
+  const generic = '登録済みのアドレスなら、ログインリンクを送りました。メールを確認してください（15分有効）。';
+  if ((recentEmail && recentEmail.n > 0) || (recentIp && recentIp.n >= 10)) return loginHtml('少し時間をおいてから試してください。');
+  if (!allowed(env).includes(email)) return loginHtml(generic);
+  const token = hex(crypto.getRandomValues(new Uint8Array(32)));
+  await env.DB.prepare('INSERT INTO login_tokens (token, email, exp) VALUES (?, ?, ?)').bind(token, email, now + 900).run();
+  try {
+    await sendLoginMail(env, email, `${new URL(request.url).origin}/auth?t=${token}`);
+  } catch (e) {
+    return loginHtml(`メールを送れませんでした（${String(e).slice(0, 120)}）`);
+  }
+  return loginHtml(generic);
+}
+async function auth(request, env) {
+  await ensureSchema(env.DB);
+  const t = new URL(request.url).searchParams.get('t') || '';
+  if (!/^[0-9a-f]{64}$/.test(t)) return loginHtml('リンクが正しくありません。');
+  const row = await env.DB.prepare('SELECT email, exp FROM login_tokens WHERE token = ?').bind(t).first();
+  await env.DB.prepare('DELETE FROM login_tokens WHERE token = ?').bind(t).run();
+  if (!row || row.exp < Date.now() / 1000 || !allowed(env).includes(row.email)) return loginHtml('リンクの期限が切れているか、使用済みです。もう一度送ってください。');
+  const exp = Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400;
+  const val = `${row.email}|${exp}|${await hmac(env.SESSION_SECRET, `${row.email}|${exp}`)}`;
+  return new Response(null, { status: 302, headers: { location: '/', 'set-cookie': `${COOKIE}=${encodeURIComponent(val)}; Path=/; Max-Age=${SESSION_DAYS * 86400}; HttpOnly; Secure; SameSite=Lax` } });
+}
+
 export default {
   async fetch(request, env) {
     const u = new URL(request.url);
     if (u.pathname === '/api/ingest' && request.method === 'POST') return ingest(request, env);
-    const who = await verifyAccess(request, env);
-    if (!who) return new Response('準備中です（Cloudflare Access の設定待ち）', { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8', 'x-robots-tag': 'noindex' } });
-    if (u.pathname === '/api/status' && request.method === 'POST') return setStatus(request, env);
+    if (u.pathname === '/robots.txt') return new Response('User-agent: *\nDisallow: /\n');
+    if (u.pathname === '/login' && request.method === 'POST') return postLogin(request, env);
+    if (u.pathname === '/auth') return auth(request, env);
+    if (u.pathname === '/logout') return new Response(null, { status: 302, headers: { location: '/', 'set-cookie': `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax` } });
+    const who = (await sessionUser(request, env)) || (await verifyAccess(request, env));
+    if (!who) return loginHtml('');
+    if (u.pathname === '/api/status' && request.method === 'POST') {
+      const origin = request.headers.get('origin');
+      if (origin && new URL(origin).host !== u.host) return new Response('forbidden', { status: 403 });
+      return setStatus(request, env);
+    }
     if (u.pathname === '/robots.txt') return new Response('User-agent: *\nDisallow: /\n');
     if (u.pathname === '/') return page(request, env, who);
     return new Response('not found', { status: 404 });
