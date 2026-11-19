@@ -17,9 +17,13 @@ const SEARCHES = [
   { key: 'suumo-kanagawa', ta: 14, sc: KANAGAWA_SC },
 ];
 
-function searchUrl(s, page) {
+// 「新着順」は取るたびに並びが入れ替わるので、新着の見分けには使えない（2026-11-19 確認）。
+// 代わりに SUUMO の「本日の新着物件」（tc=0401303）で絞り、毎回すべてのページを読む。
+// 朝一番の回だけ「新着(2-7日前)」（tc=0401304）も足して、前の晩に出た分を拾う。
+function searchUrl(s, page, opts = {}) {
   const sc = s.sc.map((c) => `sc=${c}`).join('&');
-  return `https://suumo.jp/jj/chintai/ichiran/FR301FC001/?ta=${s.ta}&${sc}&${COMMON}${page > 1 ? `&page=${page}` : ''}`;
+  const fresh = opts.recent ? '&tc=0401304' : '&tc=0401303';
+  return `https://suumo.jp/jj/chintai/ichiran/FR301FC001/?ta=${s.ta}&${sc}&${COMMON}${fresh}${page > 1 ? `&page=${page}` : ''}`;
 }
 
 function pick(re, s) {
@@ -80,14 +84,14 @@ function parsePage(html) {
   return { hit, rooms, buildings: parts.length };
 }
 
-// 新着順に読み、既読の部屋しかないページが出たら止める（最大 maxPages）
+// 新着の絞り込み（本日／2-7日前）の結果を、最後のページまで読む（最大 maxPages）
 async function fetchSearch(s, seen, opts = {}) {
-  const maxPages = opts.maxPages || 8;
+  const maxPages = opts.maxPages || 20;
   const log = [];
   const all = [];
   let hit = null;
   for (let page = 1; page <= maxPages; page++) {
-    const url = searchUrl(s, page);
+    const url = searchUrl(s, page, opts);
     const r = await getText(url);
     const p = parsePage(r.text);
     if (page === 1) hit = p.hit;
@@ -95,7 +99,7 @@ async function fetchSearch(s, seen, opts = {}) {
     log.push({ page, status: r.status, rooms: p.rooms.length, fresh: fresh.length, error: /エラー｜SUUMO/.test(r.text) || undefined });
     all.push(...p.rooms);
     if (r.status !== 200 || p.rooms.length === 0) break;
-    if (fresh.length === 0) break;
+    if (p.buildings < 50) break; // 最後のページ（1ページ50棟）
     await sleep(opts.delayMs ?? 4000);
   }
   return { key: s.key, hit, log, rooms: all };

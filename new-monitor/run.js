@@ -77,26 +77,32 @@ async function main() {
   }
 
   // 1. SUUMO
+  // 毎回「本日の新着」を全ページ。朝（JST 10時前）の回は「新着(2-7日前)」も全ページ読んで、前の晩の分を拾う
+  const hourJst = new Date(Date.now() + 9 * 3600e3).getUTCHours();
+  const modes = [{ recent: false }];
+  if (hourJst < 10 || process.env.NM_SUUMO_RECENT === '1') modes.push({ recent: true });
   for (const s of suumo.SEARCHES) {
-    if (!want(s.key)) continue;
-    const seeding = !state.seeded[s.key] && process.env.NM_NO_SEED !== '1';
-    summary.sources[s.key] = { pages: 0, rooms: 0, fresh: 0, passed: 0, rejected: 0, duplicates: 0, priceDrops: 0, seeding };
-    try {
-      const r = await suumo.fetchSearch(s, seenSet, { maxPages: seeding ? 6 : 10 });
-      summary.sources[s.key].pages = r.log.length;
-      summary.sources[s.key].rooms = r.rooms.length;
-      summary.sources[s.key].hit = r.hit;
-      summary.sources[s.key].pageLog = r.log;
-      const pref = s.ta === 14 ? 'kanagawa' : 'tokyo';
-      for (const x of r.rooms) consider({ ...x, pref }, s.key, seeding);
-      // 最後のページまで新しい部屋ばかりなら、読み切れていない（取りこぼしの可能性）
-      const last = r.log[r.log.length - 1];
-      if (!seeding && last && last.fresh === last.rooms && last.rooms > 0) summary.sources[s.key].mayHaveGap = true;
-      state.seeded[s.key] = true;
-    } catch (e) {
-      summary.sources[s.key].error = String(e).slice(0, 200);
+    for (const m of modes) {
+      const k = m.recent ? `${s.key}-recent` : `${s.key}-today`;
+      if (!want(s.key) && !want(k)) continue;
+      const seeding = !state.seeded[k] && process.env.NM_NO_SEED !== '1';
+      summary.sources[k] = { pages: 0, rooms: 0, fresh: 0, passed: 0, rejected: 0, duplicates: 0, priceDrops: 0, seeding };
+      try {
+        const r = await suumo.fetchSearch(s, seenSet, { maxPages: m.recent ? 45 : 20, recent: m.recent });
+        summary.sources[k].pages = r.log.length;
+        summary.sources[k].rooms = r.rooms.length;
+        summary.sources[k].hit = r.hit;
+        summary.sources[k].pageLog = r.log;
+        const pref = s.ta === 14 ? 'kanagawa' : 'tokyo';
+        for (const x of r.rooms) consider({ ...x, pref }, k, seeding);
+        const last = r.log[r.log.length - 1];
+        if (last && last.rooms > 0 && r.log.length >= (m.recent ? 45 : 20)) summary.sources[k].mayHaveGap = true;
+        state.seeded[k] = true;
+      } catch (e) {
+        summary.sources[k].error = String(e).slice(0, 200);
+      }
+      await sleep(3000);
     }
-    await sleep(3000);
   }
 
   // 2. アットホーム
