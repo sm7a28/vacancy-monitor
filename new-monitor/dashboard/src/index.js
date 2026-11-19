@@ -202,9 +202,10 @@ ${sel('days', [['1', '今日'], ['3', '3日'], ['7', '7日'], ['30', '30日'], [
 <div class="health">${healthLine(summary)}</div></header>
 <main>${rows.length ? rows.map(card).join('') : '<div class="empty">該当する物件はありません</div>'}</main>
 <script>
+const BASE = ${JSON.stringify(request.nmBase || '')};
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('.st button'); if (!b) return;
-  const r = await fetch('/api/status', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: b.dataset.id, status: b.dataset.v }) });
+  const r = await fetch(BASE + '/api/status', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: b.dataset.id, status: b.dataset.v }) });
   if (r.ok) { b.parentElement.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b && b.dataset.v !== '')); b.closest('.card').classList.toggle('dim', b.dataset.v === 'skip'); }
 });
 </script></body></html>`;
@@ -315,11 +316,15 @@ export default {
     if (u.pathname === '/login' && request.method === 'POST') return postLogin(request, env);
     if (u.pathname === '/auth') return auth(request, env);
     if (u.pathname === '/logout') return new Response(null, { status: 302, headers: { location: '/', 'set-cookie': `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax` } });
-    const who = (await sessionUser(request, env)) || (await verifyAccess(request, env));
+    // admin.sevenart-projects.com（パスワード確認済み）からの中継
+    const internal = !!env.INTERNAL_KEY && request.headers.get('x-nm-internal') === env.INTERNAL_KEY;
+    const baseHdr = request.headers.get('x-nm-base') || '';
+    request.nmBase = internal && /^\/[a-z]+$/.test(baseHdr) ? baseHdr : '';
+    const who = (internal ? 'admin' : null) || (await sessionUser(request, env)) || (await verifyAccess(request, env));
     if (!who) return loginHtml('');
     if (u.pathname === '/api/status' && request.method === 'POST') {
       const origin = request.headers.get('origin');
-      if (origin && new URL(origin).host !== u.host) return new Response('forbidden', { status: 403 });
+      if (!internal && origin && new URL(origin).host !== u.host) return new Response('forbidden', { status: 403 });
       return setStatus(request, env);
     }
     if (u.pathname === '/robots.txt') return new Response('User-agent: *\nDisallow: /\n');
