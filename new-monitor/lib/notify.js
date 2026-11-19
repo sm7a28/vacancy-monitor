@@ -39,6 +39,7 @@ function format(ev) {
     lines.push(`地図：${mapLink(x)}`);
     if (ev.salonUrl) lines.push(`駅のサロン検索：${ev.salonUrl}`);
   }
+  if (process.env.NM_DASH_URL) lines.push(`一覧：${process.env.NM_DASH_URL}/`);
   return lines.join('\n');
 }
 
