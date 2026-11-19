@@ -22,6 +22,8 @@ function format(ev) {
     lines.push(`${ev.room.floor} ${ev.room.area} ${ev.room.madori} ${ev.room.rent}（管理費 ${ev.room.admin || '-'}）`);
     lines.push(ev.room.url);
     lines.push(`建物ページ：${ev.buildingUrl}`);
+    if (ev.buildingKey) lines.push(`場所：${String(ev.buildingKey).replace(/^東京都|^神奈川県/, '')}`);
+    for (const s of (ev.spaces || []).slice(0, 3)) lines.push(`既存スペース：${s.name} ${s.url}`);
     if (ev.inquired) lines.push(`${ev.inquired.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${ev.inquired.asked}：${ev.inquired.result}）`);
   } else {
     lines.push(`${x.kind || ''} ${x.address || ''}`.trim());

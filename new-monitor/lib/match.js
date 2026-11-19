@@ -25,6 +25,9 @@ function baseName(s) {
   return normName(s).replace(/第?\d+(号館|号棟|棟)?$/, '').replace(/^第?\d+/, '').replace(/(本館|新館|別館|東館|西館|南館|北館|[a-z]棟|[a-z]館)$/, '');
 }
 
+// 理由の文に出す呼び名（名前のない建物はスペース名か住所）
+const bLabel = (b) => b.name || ((b.spaces || [])[0] || {}).name || b.key;
+
 const townKey = (s) => String(s || '').replace(/[がケヶ]/g, 'ケ');
 
 function sameChome(b, a) {
@@ -64,8 +67,8 @@ function matchListing(x, buildings) {
   const same = buildings.filter((b) => sameChome(b, a) && a.chome != null);
   if (same.length > 0 && same.length <= 3) {
     // 名前が載っていて、どれとも違うなら別の建物の可能性が高い
-    if (nfkc(x.name || '').trim().length >= 2) return { label: '', building: null, reason: `同じ丁目に実績ビルあり（${same.map((b) => b.name).join('・')}）。名前は違う`, others: same };
-    return { label: '実績ビル？', building: same[0], reason: `建物名なし。同じ丁目に実績ビル（${same.map((b) => b.name).join('・')}）`, others: same };
+    if (nfkc(x.name || '').trim().length >= 2) return { label: '', building: null, reason: `同じ丁目に実績ビルあり（${same.map(bLabel).join('・')}）。名前は違う`, others: same };
+    return { label: '実績ビル？', building: same[0], reason: `建物名なし。同じ丁目に実績ビル（${same.map(bLabel).join('・')}）`, others: same };
   }
   if (same.length > 3) {
     return { label: '', building: null, reason: `同じ丁目に実績ビルが${same.length}棟（絞り込みは次の段階）`, others: same.slice(0, 5) };

@@ -23,6 +23,8 @@ let schemaReady = false;
 async function ensureSchema(db) {
   if (schemaReady) return;
   for (const s of SCHEMA) await db.prepare(s).run();
+  // 後から足した列（あれば何もしない）
+  try { await db.prepare('ALTER TABLE listings ADD COLUMN images TEXT').run(); } catch { /* 追加済み */ }
   schemaReady = true;
 }
 
@@ -67,22 +69,27 @@ function row(ev, at) {
       title: ev.buildingName, kind: (ev.building && ev.building.kind) || '', address: '', stations: '',
       rent: 0, admin: 0, total: 0, area: parseFloat(r.area) || null, tsubo: 0, floor: r.floor, madori: r.madori,
       tags: JSON.stringify([r.rent, r.admin ? `管理費 ${r.admin}` : ''].filter(Boolean)),
-      match_reason: 'HOMES の建物ページに新しい募集', building: JSON.stringify({ name: ev.buildingName, url: ev.buildingUrl }),
-      url: r.url, map_url: '', salon_url: '', also_on: '', price_drop: '', relist: 0, text: ev.text || '', at,
+      match_reason: 'HOMES の建物ページに新しい募集', building: JSON.stringify({ name: ev.buildingName, url: ev.buildingUrl, key: ev.buildingKey || '', spaces: ev.spaces || [] }),
+      url: r.url, map_url: '', salon_url: '', also_on: '', price_drop: '', relist: 0, text: ev.text || '', images: '[]', at,
     };
   }
   const x = ev.listing || {};
   const j = ev.judge || {};
   const m = ev.match || {};
+  const slimB = (b) => ({ name: b.name, key: b.key, spaces: (b.spaces || []).slice(0, 5) });
+  // 実績ビル（一致した建物）と、同じ丁目にある実績ビル（候補）
+  const bInfo = m.building ? { ...slimB(m.building), others: (m.others || []).filter((o) => o.key !== m.building.key).slice(0, 4).map(slimB) }
+    : (m.others && m.others.length ? { name: '', key: '', spaces: [], others: m.others.slice(0, 5).map(slimB) } : null);
   return {
     id: x.id, site: x.site, type: 'listing', label: ev.label || '', tier: j.tier || '', notify: ev.notify === false ? 0 : 1,
     title: x.name || x.title || '', kind: x.kind || '', address: x.address || '',
     stations: (x.stations || []).filter((s) => s.station).map((s) => `${s.station}${s.walk != null ? ` ${s.walk}分` : ''}`).join('・'),
     rent: x.rent || 0, admin: x.admin || 0, total: j.total || 0, area: x.area || null, tsubo: j.tsubo || 0,
     floor: x.floor || '', madori: x.madori || '', tags: JSON.stringify(j.tags || []), match_reason: m.reason || '',
-    building: m.building ? JSON.stringify({ name: m.building.name, key: m.building.key, spaces: (m.building.spaces || []).slice(0, 5) }) : '',
+    building: bInfo ? JSON.stringify(bInfo) : '',
     url: x.url || '', map_url: ev.mapUrl || '', salon_url: ev.salonUrl || '', also_on: ev.alsoOn || '',
-    price_drop: ev.priceDrop ? JSON.stringify(ev.priceDrop) : '', relist: ev.relist ? 1 : 0, text: ev.text || '', at,
+    price_drop: ev.priceDrop ? JSON.stringify(ev.priceDrop) : '', relist: ev.relist ? 1 : 0, text: ev.text || '',
+    images: JSON.stringify((x.images || []).filter((u) => /^https:\/\//.test(u)).slice(0, 4)), at,
   };
 }
 
@@ -96,11 +103,12 @@ async function ingest(request, env) {
     const r = row(ev, at);
     if (!r.id) continue;
     stmts.push(env.DB.prepare(
-      `INSERT INTO listings (id, site, type, first_seen, last_event, label, tier, notify, title, kind, address, stations, rent, admin, total, area, tsubo, floor, madori, tags, match_reason, building, url, map_url, salon_url, also_on, price_drop, relist, text)
-       VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)
+      `INSERT INTO listings (id, site, type, first_seen, last_event, label, tier, notify, title, kind, address, stations, rent, admin, total, area, tsubo, floor, madori, tags, match_reason, building, url, map_url, salon_url, also_on, price_drop, relist, text, images)
+       VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)
        ON CONFLICT(id) DO UPDATE SET last_event = ?4, total = ?14, rent = ?12, admin = ?13, price_drop = CASE WHEN ?26 <> '' THEN ?26 ELSE price_drop END,
-         relist = MAX(relist, ?27), also_on = CASE WHEN ?25 <> '' THEN ?25 ELSE also_on END, text = ?28`,
-    ).bind(r.id, r.site, r.type, at, r.label, r.tier, r.notify, r.title, r.kind, r.address, r.stations, r.rent, r.admin, r.total, r.area, r.tsubo, r.floor, r.madori, r.tags, r.match_reason, r.building, r.url, r.map_url, r.salon_url, r.also_on, r.price_drop, r.relist, r.text));
+         relist = MAX(relist, ?27), also_on = CASE WHEN ?25 <> '' THEN ?25 ELSE also_on END, text = ?28,
+         images = CASE WHEN ?29 <> '[]' THEN ?29 ELSE images END, building = CASE WHEN ?21 <> '' THEN ?21 ELSE building END`,
+    ).bind(r.id, r.site, r.type, at, r.label, r.tier, r.notify, r.title, r.kind, r.address, r.stations, r.rent, r.admin, r.total, r.area, r.tsubo, r.floor, r.madori, r.tags, r.match_reason, r.building, r.url, r.map_url, r.salon_url, r.also_on, r.price_drop, r.relist, r.text, r.images));
   }
   for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   return Response.json({ ok: true, saved: stmts.length - 1 });
@@ -123,7 +131,37 @@ form.f{display:flex;flex-wrap:wrap;gap:6px;align-items:center}form.f select,form
 .links{display:flex;flex-wrap:wrap;gap:10px;font-size:13.5px;margin-top:4px}.links a{color:var(--blue)}
 .st{display:flex;gap:6px;margin-top:8px}.st button{font:inherit;font-size:13px;padding:3px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}.st button.on{background:var(--ink);color:var(--bg)}
 .reason{font-size:13px;color:var(--gold);margin-top:2px}.empty{color:var(--sub);padding:30px 0;text-align:center}
+.row{display:flex;gap:12px}.body{flex:1;min-width:0}
+.thumbs{flex:0 0 132px;display:grid;grid-template-columns:1fr 1fr;gap:3px;align-content:start}
+.thumbs a:first-child{grid-column:1/3}.thumbs img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;background:var(--line);display:block}
+.thumbs.none{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;height:auto;background:var(--bg);border:1px dashed var(--line);border-radius:6px;color:var(--muted);font-size:12px}
+.site{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;border-radius:4px;padding:1px 7px 1px 4px;color:#fff}
+.site img{width:14px;height:14px;border-radius:3px;background:#fff}
+.site.suumo{background:#4f9a1f}.site.athome{background:#e8730c}.site.homes{background:#c8312b}
+.jis{margin-top:6px;border-left:3px solid var(--accent);padding:4px 10px;background:var(--bg);border-radius:0 6px 6px 0;font-size:13.5px}
+.jis .h{font-weight:700}.jis a{color:var(--blue)}.jis .sp{display:block;margin-left:1em}
+@media (max-width:560px){.row{flex-direction:column}.thumbs{flex:none;grid-template-columns:repeat(4,1fr);width:100%}.thumbs a:first-child{grid-column:auto}}
 `;
+const SITE = { suumo: ['SUUMO', 'suumo.jp'], athome: ['アットホーム', 'athome.co.jp'], homes: ["HOME'S", 'homes.co.jp'] };
+const siteBadge = (s) => {
+  const [n, d] = SITE[s] || [s, ''];
+  return `<span class="site ${esc(s)}">${d ? `<img src="https://www.google.com/s2/favicons?domain=${d}&sz=32" alt="" loading="lazy">` : ''}${esc(n)}</span>`;
+};
+const gmap = (q) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+// 実績ビルの場所（建物名・住所・入っているスペース）
+function jissekiBlock(b, label) {
+  if (!b) return '';
+  const one = (x, head) => {
+    const addr = String(x.key || '').replace(/^東京都|^神奈川県/, '');
+    const nm = x.name || '（建物名なし）';
+    const sp = (x.spaces || []).map((s) => `<a class="sp" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.source || '')}：${esc(s.name)}</a>`).join('');
+    return `<div><span class="h">${head}</span> ${esc(nm)}${addr ? `　<a href="${esc(gmap(x.key + (x.name ? ' ' + x.name : '')))}" target="_blank" rel="noopener">${esc(addr)}</a>` : ''}${x.url ? `　<a href="${esc(x.url)}" target="_blank" rel="noopener">HOMES の建物ページ</a>` : ''}${sp}</div>`;
+  };
+  const parts = [];
+  if (b.name || b.key || (b.spaces || []).length) parts.push(one(b, label === '実績ビル？' ? '実績ビル（候補）：' : label ? '実績ビル：' : '同じ名前・シリーズの実績ビル：'));
+  for (const o of b.others || []) parts.push(one(o, '同じ丁目の実績ビル：'));
+  return parts.length ? `<div class="jis">${parts.join('')}</div>` : '';
+}
 
 function labelBadge(r) {
   if (r.label === '実績ビル') return '<span class="lb j">実績ビル</span>';
@@ -141,20 +179,23 @@ function card(r) {
   if (r.map_url) links.push(`<a href="${esc(r.map_url)}" target="_blank" rel="noopener">地図</a>`);
   if (r.salon_url) links.push(`<a href="${esc(r.salon_url)}" target="_blank" rel="noopener">駅のサロン検索</a>`);
   if (r.also_on) links.push(`<a href="${esc(r.also_on)}" target="_blank" rel="noopener">別サイトの掲載</a>`);
-  if (b && b.url) links.push(`<a href="${esc(b.url)}" target="_blank" rel="noopener">HOMES の建物ページ</a>`);
-  for (const s of (b && b.spaces) || []) links.push(`<a href="${esc(s.url)}" target="_blank" rel="noopener">既存：${esc(s.name)}</a>`);
+  const imgs = (() => { try { return JSON.parse(r.images || '[]').filter((u) => /^https:\/\//.test(u)); } catch { return []; } })();
+  const thumbs = imgs.length
+    ? `<div class="thumbs">${imgs.slice(0, 3).map((u) => `<a href="${esc(r.url)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer"></a>`).join('')}</div>`
+    : '<div class="thumbs none">写真なし</div>';
   const price = r.type === 'homes' ? '' : `<span class="price">${man(r.total)}</span>（${man(r.rent)}＋${man(r.admin)}）／${r.area ?? '-'}㎡／坪${man(r.tsubo)}`;
   const st = (v, txt) => `<button class="${r.status === v ? 'on' : ''}" data-id="${esc(r.id)}" data-v="${v}">${txt}</button>`;
-  return `<div class="card${r.status === 'skip' ? ' dim' : ''}">
-    <div class="top">${labelBadge(r)}<span class="t">${esc(r.title || r.kind || '（建物名なし）')}</span><span class="meta">${esc(r.site)}・${esc(r.first_seen)}</span></div>
+  return `<div class="card${r.status === 'skip' ? ' dim' : ''}"><div class="row">${thumbs}<div class="body">
+    <div class="top">${siteBadge(r.site)}${labelBadge(r)}<span class="t">${esc(r.title || r.kind || '（建物名なし）')}</span><span class="meta">${esc(r.first_seen)}</span></div>
     <div class="meta">${esc(r.kind)} ${esc(r.address)} ${esc(r.stations)}</div>
     <div>${price} ${esc(r.floor || '')} ${esc(r.madori || '')}</div>
     ${r.match_reason ? `<div class="reason">${esc(r.match_reason)}</div>` : ''}
+    ${jissekiBlock(b, r.label)}
     ${drop ? `<div class="reason">値下げ ${man(drop.from)} → ${man(drop.to)}</div>` : ''}${r.relist ? '<div class="reason">再掲</div>' : ''}
     ${tags.length ? `<div class="tags">${tags.map((t) => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
     <div class="links">${links.join('')}</div>
     <div class="st">${st('consider', '検討する')}${st('skip', '見送り')}${st('', '印なし')}</div>
-  </div>`;
+  </div></div></div>`;
 }
 
 function healthLine(summary) {

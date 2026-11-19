@@ -5,6 +5,8 @@
 const { getText, sleep, nfkc, stripTags, parseYen, parseArea, parseAddress } = require('./util');
 
 const MAX_REQUESTS = 4;
+// 「西東京市貸事務所」「スモールオフィス」のような、建物名ではない呼び名
+const GENERIC_NAME = /貸(事務所|店舗|倉庫|ビル)|(区|市|丁目)\S*(オフィス|事務所)$|^\S{1,4}事務所$|^(スモールオフィス|事務所|店舗|倉庫|貸室)$|^[^\s]{1,4}[町丁]$/;
 // URLの形は、保存した検索条件（倉庫）を開いたときの本物のURLにそろえる（2026-11-19 確認）。
 // basic=kc501（下限なし）,kc603（20万円以下）,kt223（10㎡以上）,kf101,ke004（徒歩10分以内）,kn001,kj001
 // 効いているかは run.js で結果から確かめる（overPrice・overWalk・underArea）。
@@ -29,6 +31,36 @@ const KANAGAWA = [
 
 function plan(runIndex) {
   return [...TOKYO, KANAGAWA[runIndex % KANAGAWA.length]].slice(0, MAX_REQUESTS);
+}
+
+// ページに埋め込まれたデータ（serverApp-state）から、建物名（tatemonoNm）と写真を取る
+function stateInfo(html, id) {
+  const needle = `"id":"${id}"`;
+  let k = html.indexOf(needle);
+  while (k >= 0) {
+    const s = html.lastIndexOf('{"title":', k);
+    if (s >= 0 && k - s < 600) {
+      let d = 0;
+      let e = s;
+      for (; e < html.length; e++) {
+        const ch = html[e];
+        if (ch === '"') { e++; while (e < html.length && html[e] !== '"') { if (html[e] === '\\') e++; e++; } continue; }
+        if (ch === '{') d++;
+        else if (ch === '}') { d--; if (!d) break; }
+      }
+      try {
+        const o = JSON.parse(html.slice(s, e + 1));
+        if (o.id === id) {
+          const urls = [o.mainImage, ...(o.images || [])].filter((m) => m && m.url).map((m) => `https://www.athome.co.jp${m.url}?width=400&height=300&margin=true`);
+          let name = nfkc(o.tatemonoNm || '').trim();
+          const fl = ((o.bukkenInfo && o.bukkenInfo.kaidateKai) || '').match(/\/\s*(B?\d+)階/);
+          return { name, floor: fl ? `${fl[1]}階` : '', images: [...new Set(urls)] };
+        }
+      } catch { /* 次の出現を見る */ }
+    }
+    k = html.indexOf(needle, k + 1);
+  }
+  return null;
 }
 
 function parsePage(html) {
@@ -75,6 +107,11 @@ function parsePage(html) {
       else if (rm) floor = `${rm[1]}${rm[2]}階`;
       name = title.replace(/\s+(B?\d+階\S*|B?\d+F|B?\d{3,4}(号室)?)$/i, '').trim();
     }
+    // 題名に建物名がなくても、埋め込みデータに建物名が入っていることがある
+    const si = stateInfo(html, id);
+    if (si && si.name && !name) name = si.name;
+    if (si && si.floor && !floor) floor = si.floor;
+    if (GENERIC_NAME.test(name)) name = '';
     items.push({
       site: 'athome',
       id: `athome:${id}`,
@@ -82,7 +119,7 @@ function parsePage(html) {
       kind: syumoku, title, name, address, addr: parseAddress(address), stations,
       rent, admin: Number.isNaN(admin) ? 0 : admin, area,
       built: built ? `${built[1]}-${String(built[2]).padStart(2, '0')}` : null,
-      floor, shop,
+      floor, shop, images: si ? si.images.slice(0, 6) : [],
     });
   }
   return { blocked, items };

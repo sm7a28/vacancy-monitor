@@ -183,7 +183,7 @@ async function main() {
           if (!prev.rooms.includes(room.url)) {
             src.newRooms++;
             const inq = matchInquiry({ url: room.url, name: t.name, addr: {} }, cand.inquiries);
-            events.push({ type: 'homes', source: 'homes', label: '実績ビル', buildingKey: t.key, buildingName: t.name, buildingUrl: t.href, room, building: j.building, inquired: inq ? { same: inq.same, asked: inq.q.asked, result: inq.q.result } : undefined });
+            events.push({ type: 'homes', source: 'homes', label: '実績ビル', buildingKey: t.key, buildingName: t.name, buildingUrl: t.href, room, building: j.building, spaces: ((cand.buildings.find((x) => x.key === t.key) || {}).spaces || []).slice(0, 5), inquired: inq ? { same: inq.same, asked: inq.q.asked, result: inq.q.result } : undefined });
           }
         }
       }
@@ -209,7 +209,7 @@ async function main() {
   // ダッシュボードに送る
   if (process.env.NM_DASH_URL && process.env.NM_DASH_TOKEN) {
     try {
-      const slim = events.map((ev) => ({ ...ev, listing: ev.listing ? { ...ev.listing, images: undefined } : undefined }));
+      const slim = events.map((ev) => ({ ...ev, listing: ev.listing ? { ...ev.listing, images: (ev.listing.images || []).slice(0, 4) } : undefined }));
       const res = await fetch(`${process.env.NM_DASH_URL}/api/ingest`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-nm-token': process.env.NM_DASH_TOKEN }, body: JSON.stringify({ summary: { ...summary, sources: Object.fromEntries(Object.entries(summary.sources).map(([k, v]) => { const { pageLog, ...rest } = v; return [k, rest]; })) }, events: slim }) });
       summary.dashboard = res.status;
     } catch (e) { summary.dashboard = String(e).slice(0, 100); }
