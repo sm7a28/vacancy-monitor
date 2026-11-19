@@ -64,7 +64,7 @@ function matchListing(x, buildings) {
   const same = buildings.filter((b) => sameChome(b, a) && a.chome != null);
   if (same.length > 0 && same.length <= 3) {
     // 名前が載っていて、どれとも違うなら別の建物の可能性が高い
-    if (nm && nm.length >= 3) return { label: '', building: null, reason: `同じ丁目に実績ビルあり（${same.map((b) => b.name).join('・')}）。名前は違う`, others: same };
+    if (nfkc(x.name || '').trim().length >= 2) return { label: '', building: null, reason: `同じ丁目に実績ビルあり（${same.map((b) => b.name).join('・')}）。名前は違う`, others: same };
     return { label: '実績ビル？', building: same[0], reason: `建物名なし。同じ丁目に実績ビル（${same.map((b) => b.name).join('・')}）`, others: same };
   }
   if (same.length > 3) {

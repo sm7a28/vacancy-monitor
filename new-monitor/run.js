@@ -69,6 +69,8 @@ async function main() {
     }
     if (fp) state.fps[fp] = { id: x.id, site: x.site, url: x.url, d: d0 };
     ev.label = ev.match.label || '';
+    // 知らせる対象：実績ビル系は全部。向いてる物件は重点・ピンポイントと、地下・1階だけ（ふつうの地域は件数が多すぎるため記録のみ。2026-11-19）
+    ev.notify = !!ev.label || j.tier !== 'normal' || j.tags.includes('地下') || j.tags.includes('1階');
     // 別サイトで先に知らせた部屋は、短く添えるだけ（速さ重視：先に出た方で知らせる）
     ev.kindLabel = ev.duplicateOf ? '同じ部屋の別サイト掲載' : '';
     events.push(ev);
@@ -184,7 +186,7 @@ async function main() {
   let sent = 0;
   if (process.env.NM_NOTIFY === '1' && process.env.DISCORD_WEBHOOK_URL) {
     for (const ev of events) {
-      if (ev.duplicateOf) continue;
+      if (ev.duplicateOf || ev.notify === false) continue;
       if (await notify.send(ev.text, process.env.DISCORD_WEBHOOK_URL)) sent++;
       await sleep(1200);
     }
@@ -192,7 +194,7 @@ async function main() {
 
   // ログ（件数だけ）
   const counts = {};
-  for (const ev of events) counts[ev.label || '向いてる物件'] = (counts[ev.label || '向いてる物件'] || 0) + 1;
+  for (const ev of events) { const k = (ev.label || '向いてる物件') + (ev.notify === false ? '（記録のみ）' : ''); counts[k] = (counts[k] || 0) + 1; }
   console.log(`巡回 ${summary.at}（${runIndex + 1}回目）`);
   for (const [k, v] of Object.entries(summary.sources)) {
     const { pageLog, ...rest } = v;
