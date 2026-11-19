@@ -312,6 +312,11 @@ export default {
   async fetch(request, env) {
     const u = new URL(request.url);
     if (u.pathname === '/api/ingest' && request.method === 'POST') return ingest(request, env);
+    // 巡回を今すぐ起動する（合言葉 NM_DASH_TOKEN が要る。定時の起動の確認用）
+    if (u.pathname === '/api/dispatch' && request.method === 'POST') {
+      if (!env.NM_DASH_TOKEN || request.headers.get('x-nm-token') !== env.NM_DASH_TOKEN) return new Response('forbidden', { status: 403 });
+      return Response.json(await dispatch(env));
+    }
     if (u.pathname === '/robots.txt') return new Response('User-agent: *\nDisallow: /\n');
     if (u.pathname === '/login' && request.method === 'POST') return postLogin(request, env);
     if (u.pathname === '/auth') return auth(request, env);
