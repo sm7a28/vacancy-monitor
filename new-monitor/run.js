@@ -37,20 +37,30 @@ const IB_GENRE = {
   dance: { name: 'ダンス', path: (c) => `tokyo-${c}-dance` },
 };
 const DANCE_STATIONS = new Set(['立川', '三鷹', '府中', '調布', '国分寺']);
-function guessGenre(x, j) {
+// 業態ごとの「徒歩ぎりぎり圏内」と、向く広さの目安（2026-11-20 ユーザー指示：ダンス10分・サロン5分・パーティー7分・会議室4分）
+const GENRE_WALK = { dance: 10, salon: 5, party: 7, kaigishitsu: 4 };
+const GENRE_MIN_AREA = { dance: 25, salon: 0, party: 20, kaigishitsu: 0 };
+const nearest = (x) => (x.stations || []).filter((s) => s.station && s.walk != null).sort((a, b) => a.walk - b.walk)[0];
+// 向いていそうな業態を順に並べ、広さと徒歩の両方が合う最初のものを返す。どれも合わなければ null（実績ビル以外は拾わない）
+function genreOrder(x, j) {
   const area = x.area || 0;
   const st = ((x.stations || [])[0] || {}).station || '';
   const low = (j.tags || []).some((t) => t === '地下' || t === '1階');
-  if (DANCE_STATIONS.has(st) && area >= 25) return 'dance';
-  if (area >= 30 || (low && area >= 20)) return 'party';
-  return 'salon';
+  if (DANCE_STATIONS.has(st) && area >= 25) return ['dance', 'party', 'salon', 'kaigishitsu'];
+  if (area >= 30 || (low && area >= 20)) return ['party', 'dance', 'salon', 'kaigishitsu'];
+  return ['salon', 'party', 'dance', 'kaigishitsu'];
+}
+function guessGenre(x, j) {
+  const st = nearest(x);
+  if (!st) return null;
+  return genreOrder(x, j).find((g) => (x.area || 0) >= GENRE_MIN_AREA[g] && st.walk <= GENRE_WALK[g]) || null;
 }
 function instabaseLinks(x, j) {
-  const st = (x.stations || []).filter((s) => s.station && s.walk != null).sort((a, b) => a.walk - b.walk)[0];
+  const st = nearest(x);
   if (!st) return null;
   const name = st.station.replace(/駅$/, '');
   const code = STATION_CODES[name];
-  const genre = guessGenre(x, j);
+  const genre = guessGenre(x, j) || genreOrder(x, j)[0];
   const url = (g) => (code ? `https://www.instabase.jp/${IB_GENRE[g].path(code)}` : `https://www.google.com/search?q=${encodeURIComponent(`インスタベース ${name}駅 ${IB_GENRE[g].name}`)}`);
   return { station: name, genre, genreName: IB_GENRE[genre].name, url: url(genre), all: Object.fromEntries(Object.keys(IB_GENRE).map((g) => [g, url(g)])) };
 }
@@ -89,8 +99,11 @@ async function main() {
     seenSet.add(x.id);
     if (seeding) return;
     if (!j.pass) { s.rejected++; return; }
+    const match = matchListing(x, cand.buildings);
+    // 業態ごとの徒歩圏内に入らない物件は、実績ビル系でなければ拾わない
+    if (!match.label && !guessGenre(x, j)) { s.tooFar = (s.tooFar || 0) + 1; return; }
     s.passed++;
-    const ev = { type: 'listing', source: sourceKey, listing: x, judge: j, match: matchListing(x, cand.buildings) };
+    const ev = { type: 'listing', source: sourceKey, listing: x, judge: j, match };
     if (fp && state.fps[fp] && state.fps[fp].id !== x.id) {
       const prev = state.fps[fp];
       if (prev.site !== x.site) { ev.duplicateOf = prev; ev.alsoOn = prev.url; s.duplicates++; }

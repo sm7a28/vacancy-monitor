@@ -1,5 +1,5 @@
 # 新しい監視（SUUMO・アットホームの新着と、HOMES の建物ページ）。1日4回。
-# 試運転中は Discord に送らず、結果は new-monitor/results/ に暗号化して残す（NM_NOTIFY を 1 にすると送る）。
+# Discord に送る（NM_NOTIFY=1。2026-11-20 から）。結果は new-monitor/results/ に暗号化して残す。
 # 既読の記録は GitHub Actions のキャッシュに置く（暗号化済み）。ログには件数だけを出す。
 name: new-monitor
 
@@ -40,7 +40,7 @@ jobs:
           NM_HOMES_TOKEN: ${{ secrets.NM_HOMES_TOKEN }}
           NM_DASH_URL: ${{ secrets.NM_DASH_URL }}
           NM_DASH_TOKEN: ${{ secrets.NM_DASH_TOKEN }}
-          NM_NOTIFY: '0'
+          NM_NOTIFY: '1'
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: node new-monitor/run.js
 
