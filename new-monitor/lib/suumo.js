@@ -105,4 +105,13 @@ async function fetchSearch(s, seen, opts = {}) {
   return { key: s.key, hit, log, rooms: all };
 }
 
-module.exports = { SEARCHES, searchUrl, parsePage, fetchSearch };
+// 物件ページの「情報更新日」を取る（一覧には載っていない）
+async function fetchDetail(url) {
+  const r = await getText(url);
+  if (r.status !== 200) return { status: r.status, updated: '' };
+  const t = stripTags(r.text.replace(/<script[\s\S]*?<\/script>/g, ''));
+  const m = t.match(/情報更新日\s*(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  return { status: r.status, updated: m ? `${m[1]}/${m[2].padStart(2, '0')}/${m[3].padStart(2, '0')}` : '' };
+}
+
+module.exports = { SEARCHES, searchUrl, parsePage, fetchSearch, fetchDetail };

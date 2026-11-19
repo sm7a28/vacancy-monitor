@@ -123,11 +123,29 @@ async function main() {
     }
   }
 
+  // SUUMO の掲載日：一覧には載っていないので、条件に合った新着だけ物件ページを開いて「情報更新日」を取る
+  {
+    const targets = events.filter((ev) => ev.listing && ev.listing.site === 'suumo').slice(0, 150);
+    const src = (summary.sources.suumoDetail = { tried: targets.length, ok: 0, failed: 0 });
+    for (const ev of targets) {
+      try {
+        const d = await suumo.fetchDetail(ev.listing.url);
+        if (d.updated) { ev.listing.posted = `${d.updated}（情報更新日）`; src.ok++; } else src.failed++;
+      } catch { src.failed++; }
+      await sleep(1500);
+    }
+  }
+
   // 2. アットホーム
+  // 1回の巡回で取るのは4ページまで（5〜6回目で認証画面が出る）。東京の3種類の一覧のあと、
+  // 4つ目は「知らせる対象の物件ページ（情報公開日を取る）」があればそれを、なければ神奈川の一覧（持ち回り）を取る
+  const updates = [];
   if (want('athome')) {
     try {
-      const r = await athome.fetchAll(runIndex);
-      for (const res of r.results) {
+      const list = athome.plan(runIndex);
+      const kanagawa = list.find((s) => /kanagawa/.test(s.key));
+      let blocked = false;
+      const handle = (res) => {
         const seeding = !state.seeded[res.key] && process.env.NM_NO_SEED !== '1';
         const src = (summary.sources[res.key] = { status: res.status, blocked: res.blocked || false, skipped: res.skipped, rooms: res.items.length, fresh: 0, passed: 0, rejected: 0, duplicates: 0, priceDrops: 0, seeding });
         // URLの絞り込み（20万円以下・徒歩10分以内）が効いているかを結果で確かめる
@@ -135,16 +153,37 @@ async function main() {
         src.overWalk = res.items.filter((x) => (x.stations[0] || {}).walk > 10).length;
         src.underArea = res.items.filter((x) => x.area < 10).length;
         const pref = /kanagawa/.test(res.key) ? 'kanagawa' : 'tokyo';
-        // 掲載日：一覧には載っていない。新着順の上から読んでいるので、初めて見たものは前回この一覧を読んだ後に載ったもの
-        state.lastAt = state.lastAt || {};
-        const prevAt = state.lastAt[res.key];
-        const posted = prevAt ? `${prevAt.slice(5).replace('-', '/')}〜${summary.at.slice(5).replace('-', '/')} の間（アットホーム新着順）` : '';
-        for (const x of res.items) consider({ ...x, pref, posted }, res.key, seeding);
-        if (res.items.length > 0 && !res.blocked) state.lastAt[res.key] = summary.at;
+        for (const x of res.items) consider({ ...x, pref }, res.key, seeding);
         if (!seeding && res.items.length > 0 && src.fresh === res.items.length) src.mayHaveGap = true;
         if (res.items.length > 0) state.seeded[res.key] = true;
+        if (res.blocked) blocked = true;
+      };
+      for (const s of list.filter((x) => x !== kanagawa)) {
+        if (blocked) { summary.sources[s.key] = { skipped: 'blocked-earlier' }; continue; }
+        handle(await athome.fetchList(s));
+        await sleep(30000);
       }
-      summary.athomeBlocked = r.blocked;
+      // 情報公開日を取る順番待ち（今回の知らせる対象を先に）
+      const queue = (state.athomeDetailQueue || []).filter((q) => d0 - q.d <= 7);
+      for (const ev of events) {
+        if (ev.listing && ev.listing.site === 'athome' && ev.notify && !queue.some((q) => q.id === ev.listing.id)) queue.unshift({ id: ev.listing.id, url: ev.listing.url, d: d0 });
+      }
+      const src = (summary.sources.athomeDetail = { queued: queue.length, ok: 0 });
+      if (!blocked && queue.length) {
+        const q = queue.shift();
+        const d = await athome.fetchDetail(q.url);
+        if (d.blocked) { blocked = true; queue.unshift(q); src.blocked = true; }
+        else if (d.kokai) {
+          src.ok = 1;
+          const posted = `${d.kokai}（情報公開日）`;
+          const ev = events.find((e) => e.listing && e.listing.id === q.id);
+          if (ev) ev.listing.posted = posted; else updates.push({ id: q.id, posted });
+        }
+      } else if (!blocked && kanagawa) {
+        handle(await athome.fetchList(kanagawa));
+      }
+      state.athomeDetailQueue = queue.slice(0, 30);
+      summary.athomeBlocked = blocked;
     } catch (e) {
       summary.sources.athome = { error: String(e).slice(0, 200) };
     }
@@ -217,7 +256,7 @@ async function main() {
   if (process.env.NM_DASH_URL && process.env.NM_DASH_TOKEN) {
     try {
       const slim = events.map((ev) => ({ ...ev, listing: ev.listing ? { ...ev.listing, images: (ev.listing.images || []).slice(0, 4) } : undefined }));
-      const res = await fetch(`${process.env.NM_DASH_URL}/api/ingest`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-nm-token': process.env.NM_DASH_TOKEN }, body: JSON.stringify({ summary: { ...summary, sources: Object.fromEntries(Object.entries(summary.sources).map(([k, v]) => { const { pageLog, ...rest } = v; return [k, rest]; })) }, events: slim }) });
+      const res = await fetch(`${process.env.NM_DASH_URL}/api/ingest`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-nm-token': process.env.NM_DASH_TOKEN }, body: JSON.stringify({ summary: { ...summary, sources: Object.fromEntries(Object.entries(summary.sources).map(([k, v]) => { const { pageLog, ...rest } = v; return [k, rest]; })) }, events: slim, updates }) });
       summary.dashboard = res.status;
     } catch (e) { summary.dashboard = String(e).slice(0, 100); }
   }

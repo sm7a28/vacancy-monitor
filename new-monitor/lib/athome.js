@@ -141,4 +141,21 @@ async function fetchAll(runIndex, opts = {}) {
   return { blocked, results: out };
 }
 
-module.exports = { plan, parsePage, fetchAll, MAX_REQUESTS };
+// 一覧を1ページ取る
+async function fetchList(s) {
+  const r = await getText(s.url);
+  const p = parsePage(r.text);
+  return { key: s.key, status: r.status, blocked: p.blocked, items: p.items };
+}
+
+// 物件ページの「情報公開日」を取る（一覧には載っていない）。1回の巡回で取るのは1件まで（認証画面を避けるため）
+async function fetchDetail(url) {
+  const r = await getText(url);
+  const blocked = /認証にご協力ください/.test(r.text);
+  const t = stripTags(r.text.replace(/<script[\s\S]*?<\/script>/g, ''));
+  const m = t.match(/情報公開日\s*(\d{4})年(\d{1,2})月(\d{1,2})日/) || r.text.match(/kokaiDate\\?":\\?"(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  const kokai = m ? `${m[1]}/${m[2].padStart(2, '0')}/${m[3].padStart(2, '0')}` : '';
+  return { status: r.status, blocked, kokai };
+}
+
+module.exports = { plan, parsePage, fetchAll, fetchList, fetchDetail, MAX_REQUESTS };

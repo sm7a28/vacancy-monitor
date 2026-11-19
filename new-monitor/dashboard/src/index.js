@@ -111,8 +111,13 @@ async function ingest(request, env) {
          images = CASE WHEN ?29 <> '[]' THEN ?29 ELSE images END, building = CASE WHEN ?21 <> '' THEN ?21 ELSE building END`,
     ).bind(r.id, r.site, r.type, at, r.label, r.tier, r.notify, r.title, r.kind, r.address, r.stations, r.rent, r.admin, r.total, r.area, r.tsubo, r.floor, r.madori, r.tags, r.match_reason, r.building, r.url, r.map_url, r.salon_url, r.also_on, r.price_drop, r.relist, r.text, r.images, r.posted));
   }
+  const saved = stmts.length - 1;
+  // 後の巡回で分かった掲載日（アットホームの情報公開日は1回に1件しか取れないため）
+  for (const u of body.updates || []) {
+    if (u && u.id && u.posted) stmts.push(env.DB.prepare('UPDATE listings SET posted = ? WHERE id = ?').bind(String(u.posted).slice(0, 80), u.id));
+  }
   for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
-  return Response.json({ ok: true, saved: stmts.length - 1 });
+  return Response.json({ ok: true, saved, updated: (body.updates || []).length });
 }
 
 // ---- 画面 ----
@@ -205,6 +210,8 @@ function healthLine(summary) {
   const parts = [`<span>最後の巡回 ${esc(summary.at)}</span>`];
   for (const [k, v] of Object.entries(summary.sources || {})) {
     const bad = v.error || v.blocked || v.mayHaveGap || (v.failed && v.failed > 5);
+    if (k === 'athomeDetail') { parts.push(`<span>アットホーム公開日 ${v.ok ? '1件取得' : '-'}（待ち${v.queued ?? 0}）</span>`); continue; }
+    if (k === 'suumoDetail') { parts.push(`<span class="${v.failed > v.ok ? 'bad' : ''}">SUUMO 更新日 ${v.ok}/${v.tried}</span>`); continue; }
     const n = k.startsWith('homes') ? `${v.ok}/${v.buildings}棟` : `新着${v.fresh ?? 0}`;
     const extra = v.blocked ? ' 認証画面' : v.mayHaveGap ? ' 取りこぼし?' : v.error ? ' エラー' : '';
     parts.push(`<span class="${bad ? 'bad' : ''}">${esc(k)} ${n}${extra}</span>`);
