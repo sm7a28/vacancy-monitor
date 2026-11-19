@@ -42,6 +42,8 @@ jobs:
           NM_KEY: ${{ secrets.NM_KEY }}
           NM_HOMES_URL: ${{ secrets.NM_HOMES_URL }}
           NM_HOMES_TOKEN: ${{ secrets.NM_HOMES_TOKEN }}
+          NM_DASH_URL: ${{ secrets.NM_DASH_URL }}
+          NM_DASH_TOKEN: ${{ secrets.NM_DASH_TOKEN }}
           NM_NOTIFY: '0'
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: node new-monitor/run.js

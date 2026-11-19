@@ -63,6 +63,18 @@ for (const b of buildings) {
   homesTargets.push({ key: b.key, name: b.name, href: b.homes.href });
 }
 
+// 駅 → インスタベースの駅コード（駅のサロン検索URL https://www.instabase.jp/tokyo-<コード>-salon を作るため）
+const stationCodes = {};
+try {
+  const sm = JSON.parse(fs.readFileSync(path.join(ROOT, 'outputs', 'instabase-station-url-map-20260713.json'), 'utf8'));
+  for (const src of [sm.matched || {}, sm.byStation || {}]) {
+    for (const [st, v] of Object.entries(src)) {
+      const best = Object.entries(v.codes || {}).sort((a, b) => b[1] - a[1])[0];
+      if (best && !stationCodes[st]) stationCodes[st] = best[0];
+    }
+  }
+} catch (e) { console.log('駅コードの表が読めませんでした', e.message); }
+
 const key = loadKey();
-writeEnc(path.join(__dirname, '..', 'data', 'candidates.json.enc'), { savedAt: new Date().toISOString(), buildings, homesTargets }, key);
-console.log(`候補の建物 ${buildings.length} 棟（名前で照合できるもの ${buildings.filter((b) => !b.nameIsAddress).length}）、HOMES の監視対象 ${homesTargets.length} 棟`);
+writeEnc(path.join(__dirname, '..', 'data', 'candidates.json.enc'), { savedAt: new Date().toISOString(), buildings, homesTargets, stationCodes }, key);
+console.log(`候補の建物 ${buildings.length} 棟（名前で照合できるもの ${buildings.filter((b) => !b.nameIsAddress).length}）、HOMES の監視対象 ${homesTargets.length} 棟、駅コード ${Object.keys(stationCodes).length} 駅`);

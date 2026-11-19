@@ -27,10 +27,22 @@ function fingerprint(x) {
   return `${ck}|${x.area.toFixed(2)}|${(x.rent || 0) + (x.admin || 0)}`;
 }
 
+// 一番近い駅のインスタベースのサロン検索URL（駅コードが分からなければ検索のリンク）
+let STATION_CODES = {};
+function salonUrl(x) {
+  const st = (x.stations || []).filter((s) => s.station && s.walk != null).sort((a, b) => a.walk - b.walk)[0];
+  if (!st) return '';
+  const name = st.station.replace(/駅$/, '');
+  const code = STATION_CODES[name];
+  if (code) return `https://www.instabase.jp/tokyo-${code}-salon`;
+  return `https://www.google.com/search?q=${encodeURIComponent(`インスタベース ${name}駅 サロン`)}`;
+}
+
 async function main() {
   const key = loadKey();
   const cand = readEnc(CAND_FILE, key, null);
   if (!cand) throw new Error('候補の建物のファイルがありません');
+  STATION_CODES = cand.stationCodes || {};
   const state = readEnc(STATE_FILE, key, { runCount: 0, seen: {}, fps: {}, seeded: {}, homes: {} });
   const runIndex = state.runCount || 0;
   const d0 = today();
@@ -68,6 +80,8 @@ async function main() {
       else if (d0 - prev.d >= 3) { ev.relist = true; }
     }
     if (fp) state.fps[fp] = { id: x.id, site: x.site, url: x.url, d: d0 };
+    ev.mapUrl = notify.mapLink(x);
+    ev.salonUrl = salonUrl(x);
     ev.label = ev.match.label || '';
     // 知らせる対象：実績ビル系は全部。向いてる物件は重点・ピンポイントと、地下・1階だけ（ふつうの地域は件数が多すぎるため記録のみ。2026-11-19）
     ev.notify = !!ev.label || j.tier !== 'normal' || j.tags.includes('地下') || j.tags.includes('1階');
@@ -189,6 +203,15 @@ async function main() {
   writeEnc(resFile, day, key);
   writeEnc(STATE_FILE, state, key);
 
+  // ダッシュボードに送る
+  if (process.env.NM_DASH_URL && process.env.NM_DASH_TOKEN) {
+    try {
+      const slim = events.map((ev) => ({ ...ev, listing: ev.listing ? { ...ev.listing, images: undefined } : undefined }));
+      const res = await fetch(`${process.env.NM_DASH_URL}/api/ingest`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-nm-token': process.env.NM_DASH_TOKEN }, body: JSON.stringify({ summary: { ...summary, sources: Object.fromEntries(Object.entries(summary.sources).map(([k, v]) => { const { pageLog, ...rest } = v; return [k, rest]; })) }, events: slim }) });
+      summary.dashboard = res.status;
+    } catch (e) { summary.dashboard = String(e).slice(0, 100); }
+  }
+
   // 送る（試運転中は送らない）
   let sent = 0;
   if (process.env.NM_NOTIFY === '1' && process.env.DISCORD_WEBHOOK_URL) {
@@ -207,6 +230,7 @@ async function main() {
     const { pageLog, ...rest } = v;
     console.log(`  ${k}: ${JSON.stringify(rest)}`);
   }
+  console.log(`  ダッシュボード: ${summary.dashboard ?? '未設定'}`);
   console.log(`  見つけたもの: ${JSON.stringify(counts)}  送信: ${sent}件${process.env.NM_NOTIFY === '1' ? '' : '（試運転のため送らない）'}`);
 }
 

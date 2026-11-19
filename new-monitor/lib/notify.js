@@ -37,6 +37,7 @@ function format(ev) {
     if (ev.relist) lines.push(`再掲（前に見た募集と同じ部屋）`);
     lines.push(x.url);
     lines.push(`地図：${mapLink(x)}`);
+    if (ev.salonUrl) lines.push(`駅のサロン検索：${ev.salonUrl}`);
   }
   return lines.join('\n');
 }
@@ -47,4 +48,4 @@ async function send(text, webhook) {
   return res.ok;
 }
 
-module.exports = { format, send };
+module.exports = { format, send, mapLink };
