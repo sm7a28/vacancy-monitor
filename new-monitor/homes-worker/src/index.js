@@ -81,7 +81,8 @@ export default {
     const roomSec = slice(html, 'id="anchor-roomInfo_faq"', ['id="anchor-buildingInfo"', 'id="anchor-buildingHistories"'], 150000);
     const bldSec = slice(html, 'id="anchor-buildingInfo"', ['id="anchor-buildingHistories"', 'id="anchor-reports"'], 40000);
     const roomText = text(roomSec);
-    const none = /募集中の部屋情報はありません/.test(roomText);
+    // 募集中がない建物は、部屋の欄そのものがなく、ページ上部に「当サイト内で募集中の部屋情報はありません」と出る形もある（2026-11-19 確認）
+    const none = /募集中の部屋情報はありません/.test(roomSec ? roomText : html);
     const count = none ? 0 : parseInt((roomText.match(/募集中\s*(\d+)\s*件/) || [])[1] || '0', 10);
     // 募集中がないときは同じ欄に「周辺の問合せ可能な物件」（別の建物）が並ぶので、そこから先は読まない
     let own = roomSec;

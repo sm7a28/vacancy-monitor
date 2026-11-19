@@ -1,6 +1,6 @@
 // 保存済みの結果（results/日付.json.enc）をダッシュボードに送り直す。
 // 表示の項目を足したときに、既に載っている物件にも写真・実績ビルの場所などを入れるためのもの。
-// 使い方: node new-monitor/tools/resend-dash.js 2026-11-19
+// 使い方: node new-monitor/tools/resend-dash.js 2026-11-19 [18:05]
 // 鍵は new-monitor/.secrets/（nm-key.txt・dash-token.txt）から読む。値は表示しない。
 'use strict';
 const fs = require('fs');
@@ -16,7 +16,10 @@ const url = process.env.NM_DASH_URL || 'https://bukken.sevenart-projects.com';
 
 (async () => {
   const data = readEnc(path.join(__dirname, '..', 'results', `${day}.json.enc`), key, { runs: [] });
+  // 3つ目の引数（例 18:05）を渡すと、その回だけ送る。誤検知のあった回（2026-11-19 11:02）を送り直さないため
+  const only = process.argv[3];
   for (const run of data.runs) {
+    if (only && !String(run.summary.at).endsWith(` ${only}`)) continue;
     const events = run.events.map((ev) => ({ ...ev, listing: ev.listing ? { ...ev.listing, images: (ev.listing.images || []).slice(0, 4) } : undefined }));
     const summary = { ...run.summary, sources: Object.fromEntries(Object.entries(run.summary.sources || {}).map(([k, v]) => { const { pageLog, ...rest } = v; return [k, rest]; })) };
     const res = await fetch(`${url}/api/ingest`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-nm-token': token }, body: JSON.stringify({ summary, events }) });
