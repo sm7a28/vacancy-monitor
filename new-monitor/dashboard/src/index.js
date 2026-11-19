@@ -88,7 +88,7 @@ function row(ev, at) {
     rent: x.rent || 0, admin: x.admin || 0, total: j.total || 0, area: x.area || null, tsubo: j.tsubo || 0,
     floor: x.floor || '', madori: x.madori || '', tags: JSON.stringify(j.tags || []), match_reason: m.reason || '',
     building: bInfo ? JSON.stringify(bInfo) : '',
-    url: x.url || '', map_url: ev.mapUrl || '', salon_url: ev.salonUrl || '', also_on: ev.alsoOn || '',
+    url: x.url || '', map_url: ev.mapUrl || '', salon_url: ev.ib ? JSON.stringify(ev.ib) : (ev.salonUrl || ''), also_on: ev.alsoOn || '',
     price_drop: ev.priceDrop ? JSON.stringify(ev.priceDrop) : '', relist: ev.relist ? 1 : 0, text: ev.text || '',
     images: JSON.stringify((x.images || []).filter((u) => /^https:\/\//.test(u)).slice(0, 4)), posted: x.posted || '', at,
   };
@@ -183,7 +183,13 @@ function card(r) {
   const drop = (() => { try { return r.price_drop ? JSON.parse(r.price_drop) : null; } catch { return null; } })();
   const links = [`<a href="${esc(r.url)}" target="_blank" rel="noopener">物件ページ</a>`];
   if (r.map_url) links.push(`<a href="${esc(r.map_url)}" target="_blank" rel="noopener">地図</a>`);
-  if (r.salon_url) links.push(`<a href="${esc(r.salon_url)}" target="_blank" rel="noopener">駅のサロン検索</a>`);
+  // インスタベースの駅の検索（物件に合いそうな業態を先頭に。ほかの業態も並べる）
+  const ib = (() => { try { return String(r.salon_url || '').startsWith('{') ? JSON.parse(r.salon_url) : null; } catch { return null; } })();
+  if (ib) {
+    const names = { salon: 'サロン', party: 'パーティー', kaigishitsu: '会議室', dance: 'ダンス' };
+    links.push(`<a href="${esc(ib.url)}" target="_blank" rel="noopener"><b>インスタベース ${esc(ib.station)}駅・${esc(names[ib.genre] || '')}</b></a>`);
+    for (const [g, u] of Object.entries(ib.all || {})) if (g !== ib.genre) links.push(`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(names[g] || g)}</a>`);
+  } else if (r.salon_url) links.push(`<a href="${esc(r.salon_url)}" target="_blank" rel="noopener">駅のサロン検索</a>`);
   if (r.also_on) links.push(`<a href="${esc(r.also_on)}" target="_blank" rel="noopener">別サイトの掲載</a>`);
   const imgs = (() => { try { return JSON.parse(r.images || '[]').filter((u) => /^https:\/\//.test(u)); } catch { return []; } })();
   const thumbs = imgs.length

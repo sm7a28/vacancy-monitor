@@ -27,15 +27,32 @@ function fingerprint(x) {
   return `${ck}|${x.area.toFixed(2)}|${(x.rent || 0) + (x.admin || 0)}`;
 }
 
-// 一番近い駅のインスタベースのサロン検索URL（駅コードが分からなければ検索のリンク）
+// 一番近い駅のインスタベースの検索URL。物件に合いそうな業態で検索する（業態の見立てはおおまかでよい。2026-11-20 ユーザー指示）
+// 駅コードが分からない駅は Google 検索のリンク
 let STATION_CODES = {};
-function salonUrl(x) {
+const IB_GENRE = {
+  salon: { name: 'サロン', path: (c) => `tokyo-${c}-salon` },
+  party: { name: 'パーティー', path: (c) => `tokyo-${c}/list/party` },
+  kaigishitsu: { name: '会議室', path: (c) => `tokyo-${c}-kaigishitsu` },
+  dance: { name: 'ダンス', path: (c) => `tokyo-${c}-dance` },
+};
+const DANCE_STATIONS = new Set(['立川', '三鷹', '府中', '調布', '国分寺']);
+function guessGenre(x, j) {
+  const area = x.area || 0;
+  const st = ((x.stations || [])[0] || {}).station || '';
+  const low = (j.tags || []).some((t) => t === '地下' || t === '1階');
+  if (DANCE_STATIONS.has(st) && area >= 25) return 'dance';
+  if (area >= 30 || (low && area >= 20)) return 'party';
+  return 'salon';
+}
+function instabaseLinks(x, j) {
   const st = (x.stations || []).filter((s) => s.station && s.walk != null).sort((a, b) => a.walk - b.walk)[0];
-  if (!st) return '';
+  if (!st) return null;
   const name = st.station.replace(/駅$/, '');
   const code = STATION_CODES[name];
-  if (code) return `https://www.instabase.jp/tokyo-${code}-salon`;
-  return `https://www.google.com/search?q=${encodeURIComponent(`インスタベース ${name}駅 サロン`)}`;
+  const genre = guessGenre(x, j);
+  const url = (g) => (code ? `https://www.instabase.jp/${IB_GENRE[g].path(code)}` : `https://www.google.com/search?q=${encodeURIComponent(`インスタベース ${name}駅 ${IB_GENRE[g].name}`)}`);
+  return { station: name, genre, genreName: IB_GENRE[genre].name, url: url(genre), all: Object.fromEntries(Object.keys(IB_GENRE).map((g) => [g, url(g)])) };
 }
 
 async function main() {
@@ -83,7 +100,8 @@ async function main() {
     const inq = matchInquiry(x, cand.inquiries);
     if (inq) { ev.inquired = { same: inq.same, asked: inq.q.asked, result: inq.q.result }; j.tags.unshift(inq.same === 'listing' ? `問い合わせ済み（${inq.q.asked}：${inq.q.result}）` : `同じ建物に問い合わせ済み（${inq.q.asked}：${inq.q.result}）`); }
     ev.mapUrl = notify.mapLink(x);
-    ev.salonUrl = salonUrl(x);
+    ev.ib = instabaseLinks(x, j);
+    ev.salonUrl = ev.ib ? ev.ib.url : '';
     ev.label = ev.match.label || '';
     // 知らせる対象：実績ビル系は全部。向いてる物件は重点・ピンポイントと、地下・1階だけ（ふつうの地域は件数が多すぎるため記録のみ。2026-11-19）
     ev.notify = !!ev.label || j.tier !== 'normal' || j.tags.includes('地下') || j.tags.includes('1階');
@@ -123,14 +141,24 @@ async function main() {
     }
   }
 
+  // 掲載から5日を過ぎた物件は価値がないので拾わない（2026-11-20 ユーザー指示）
+  const MAX_AGE_DAYS = 5;
+  const todayJst = jstDate().replace(/-/g, '/');
+  const ageDays = (ymd) => Math.round((Date.parse(todayJst.replace(/\//g, '-')) - Date.parse(ymd.replace(/\//g, '-'))) / 86400000);
+  const dropEvent = (ev) => { const i = events.indexOf(ev); if (i >= 0) events.splice(i, 1); };
+
   // SUUMO の掲載日：一覧には載っていないので、条件に合った新着だけ物件ページを開いて「情報更新日」を取る
   {
     const targets = events.filter((ev) => ev.listing && ev.listing.site === 'suumo').slice(0, 150);
-    const src = (summary.sources.suumoDetail = { tried: targets.length, ok: 0, failed: 0 });
+    const src = (summary.sources.suumoDetail = { tried: targets.length, ok: 0, failed: 0, tooOld: 0 });
     for (const ev of targets) {
       try {
         const d = await suumo.fetchDetail(ev.listing.url);
-        if (d.updated) { ev.listing.posted = `${d.updated}（情報更新日）`; src.ok++; } else src.failed++;
+        if (d.updated) {
+          ev.listing.posted = `${d.updated}（情報更新日）`;
+          src.ok++;
+          if (ageDays(d.updated) > MAX_AGE_DAYS) { dropEvent(ev); src.tooOld++; }
+        } else src.failed++;
       } catch { src.failed++; }
       await sleep(1500);
     }
@@ -153,7 +181,17 @@ async function main() {
         src.overWalk = res.items.filter((x) => (x.stations[0] || {}).walk > 10).length;
         src.underArea = res.items.filter((x) => x.area < 10).length;
         const pref = /kanagawa/.test(res.key) ? 'kanagawa' : 'tokyo';
-        for (const x of res.items) consider({ ...x, pref }, res.key, seeding);
+        // 「NEW」の印がない物件は、新着順の上位にいても公開から日が経っている（更新で上がってきただけ）ので拾わない
+        src.notNew = 0;
+        for (const x of res.items) {
+          if (x.isNew === false) {
+            src.notNew++;
+            if (!state.seen[x.id]) state.seen[x.id] = { d: d0, t: 0 };
+            else state.seen[x.id].d = d0;
+            continue;
+          }
+          consider({ ...x, pref }, res.key, seeding);
+        }
         if (!seeding && res.items.length > 0 && src.fresh === res.items.length) src.mayHaveGap = true;
         if (res.items.length > 0) state.seeded[res.key] = true;
         if (res.blocked) blocked = true;
@@ -177,7 +215,10 @@ async function main() {
           src.ok = 1;
           const posted = `${d.kokai}（情報公開日）`;
           const ev = events.find((e) => e.listing && e.listing.id === q.id);
-          if (ev) ev.listing.posted = posted; else updates.push({ id: q.id, posted });
+          if (ev) {
+            ev.listing.posted = posted;
+            if (ageDays(d.kokai) > MAX_AGE_DAYS) { dropEvent(ev); src.tooOld = 1; }
+          } else updates.push({ id: q.id, posted });
         }
       } else if (!blocked && kanagawa) {
         handle(await athome.fetchList(kanagawa));

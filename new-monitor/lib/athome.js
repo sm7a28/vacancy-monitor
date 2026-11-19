@@ -54,7 +54,8 @@ function stateInfo(html, id) {
           const urls = [o.mainImage, ...(o.images || [])].filter((m) => m && m.url).map((m) => `https://www.athome.co.jp${m.url}?width=400&height=300&margin=true`);
           let name = nfkc(o.tatemonoNm || '').trim();
           const fl = ((o.bukkenInfo && o.bukkenInfo.kaidateKai) || '').match(/\/\s*(B?\d+)階/);
-          return { name, floor: fl ? `${fl[1]}階` : '', images: [...new Set(urls)] };
+          // isNewMark＝一覧の「NEW」の印。公開から日の浅い物件に付く（11/15 公開は4日目に付いていて、10/14 公開には付いていなかった。2026-11-20 確認）
+          return { name, floor: fl ? `${fl[1]}階` : '', images: [...new Set(urls)], isNew: !!(o.isOption && o.isOption.isNewMark) };
         }
       } catch { /* 次の出現を見る */ }
     }
@@ -119,7 +120,7 @@ function parsePage(html) {
       kind: syumoku, title, name, address, addr: parseAddress(address), stations,
       rent, admin: Number.isNaN(admin) ? 0 : admin, area,
       built: built ? `${built[1]}-${String(built[2]).padStart(2, '0')}` : null,
-      floor, shop, images: si ? si.images.slice(0, 6) : [],
+      floor, shop, images: si ? si.images.slice(0, 6) : [], isNew: si ? si.isNew : null,
     });
   }
   return { blocked, items };
