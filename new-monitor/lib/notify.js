@@ -48,10 +48,88 @@ function format(ev) {
   return lines.join('\n');
 }
 
-async function send(text, webhook) {
+// 印と色（2026-11-20 ユーザー「物件と物件の区切りがわかりにくい」「実績アリとかA級物件は何か印付けて」）
+// 1件ずつ Discord の埋め込み（左に色の帯が付くカード）で送る。リンクの自動プレビューは出ない
+const GRADE = {
+  // 実績ビル系は印だけ⭐でそろえ、帯の色と文字は分ける。ピンポイントと重点は印だけ🟢でそろえる（2026-11-20 ユーザー指示）
+  '実績ビル': { mark: '⭐', color: 0xe03131 },
+  '実績ビル？': { mark: '⭐', color: 0xf08c00 },
+  '教室ビル': { mark: '⭐', color: 0x9c36b5 },
+  '教室ビル？': { mark: '⭐', color: 0xcc5de8 },
+  pinpoint: { mark: '🟢', color: 0xf59f00, name: 'ピンポイント' },
+  focus: { mark: '🟢', color: 0x1c7ed6, name: '重点' },
+  normal: { mark: '⚪', color: 0x868e96, name: '向いてる物件' },
+};
+const SITE = { suumo: 'SUUMO', athome: 'アットホーム', homes: 'HOMES' };
+
+function grade(ev) {
+  if (ev.label && GRADE[ev.label]) return { ...GRADE[ev.label], name: ev.label };
+  const t = (ev.judge && ev.judge.tier) || 'normal';
+  return GRADE[t] || GRADE.normal;
+}
+
+const link = (label, url) => (url ? `[${label}](${url})` : '');
+
+function embed(ev) {
+  const x = ev.listing || {};
+  const g = grade(ev);
+  const d = [];
+  let title;
+  let url;
+  let image = '';
+  if (ev.type === 'homes') {
+    title = `${g.mark}【${g.name}】${ev.buildingName || ''}`;
+    url = ev.room.url;
+    d.push('**HOMES の建物ページに新しい募集**');
+    d.push(`${ev.room.floor} ${ev.room.area} ${ev.room.madori} ${ev.room.rent}（管理費 ${ev.room.admin || '-'}）`);
+    if (ev.buildingKey) d.push(`場所：${String(ev.buildingKey).replace(/^東京都|^神奈川県/, '')}`);
+    for (const s of (ev.spaces || []).slice(0, 3)) d.push(`既存スペース：${link(s.name, s.url) || s.name}`);
+    if (ev.inquired) d.push(`${ev.inquired.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${ev.inquired.asked}：${ev.inquired.result}）`);
+    d.push(link('建物ページ', ev.buildingUrl));
+  } else {
+    title = `${g.mark}【${g.name}】${ev.kindLabel ? `【${ev.kindLabel}】` : ''}${x.name || x.title || ''}`;
+    url = x.url;
+    image = (x.images || [])[0] || '';
+    d.push(`**${man(ev.judge.total)}**（家賃 ${man(x.rent)}＋管理費等 ${man(x.admin)}）／**${x.area}㎡**／坪 ${man(ev.judge.tsubo)}${x.floor ? `／${x.floor}` : ''}${x.madori ? `／${x.madori}` : ''}`);
+    d.push(stationLine(x));
+    d.push(`${x.kind || ''} ${x.address || ''}`.trim());
+    if (x.posted) d.push(`掲載：${x.posted}`);
+    if (ev.match && ev.match.reason) d.push(`照合：${ev.match.reason}`);
+    if (ev.match && ev.match.building) for (const s of (ev.match.building.spaces || []).slice(0, 3)) d.push(`既存スペース：${link(s.name, s.url) || s.name}`);
+    if (ev.judge.tags.length) d.push(`メモ：${ev.judge.tags.join('・')}`);
+    if (ev.alsoOn) d.push(`ほかのサイトにも掲載：${ev.alsoOn}`);
+    if (ev.priceDrop) d.push(`値下げ：${man(ev.priceDrop.from)}→${man(ev.priceDrop.to)}`);
+    if (ev.relist) d.push('再掲（前に見た募集と同じ部屋）');
+    const links = [link('物件ページ', x.url), link('地図', mapLink(x))];
+    if (ev.ib) links.push(link(`インスタベース（${ev.ib.station}駅・${ev.ib.genreName}）`, ev.ib.url));
+    d.push(links.filter(Boolean).join('　'));
+  }
+  if (process.env.NM_DASH_URL) d.push(link('一覧', `${process.env.NM_DASH_URL}/`));
+  const e = { title: title.slice(0, 250), url, color: g.color, description: d.filter(Boolean).join('\n').slice(0, 3800), footer: { text: SITE[ev.type === 'homes' ? 'homes' : x.site] || '' } };
+  if (image) e.thumbnail = { url: image };
+  return e;
+}
+
+// 通知の1行目（スマホの通知にも出る）
+function headline(ev) {
+  const g = grade(ev);
+  const x = ev.listing || {};
+  if (ev.type === 'homes') return `${g.mark}【${g.name}】${ev.buildingName || ''} ${ev.room.floor} ${ev.room.rent}`;
+  const st = (x.stations || [])[0];
+  return `${g.mark}【${g.name}】${x.name || ''} ${man(ev.judge.total)} ${x.area}㎡${st ? ` ${st.station}${st.walk != null ? `徒歩${st.walk}分` : ''}` : ''}`;
+}
+
+async function post(webhook, body) {
+  return fetch(webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+
+async function send(ev, webhook) {
   if (!webhook) return false;
-  const res = await fetch(webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: text.slice(0, 1900) }) });
+  if (typeof ev === 'string') return (await post(webhook, { content: ev.slice(0, 1900) })).ok;
+  let res = await post(webhook, { content: headline(ev).slice(0, 300), embeds: [embed(ev)] });
+  // 埋め込みが弾かれたら、文字だけ（リンクのプレビューなし）で送り直す
+  if (res.status === 400) res = await post(webhook, { content: (ev.text || format(ev)).slice(0, 1900), flags: 4 });
   return res.ok;
 }
 
-module.exports = { format, send, mapLink };
+module.exports = { format, send, mapLink, embed, headline };

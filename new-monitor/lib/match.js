@@ -35,7 +35,14 @@ function sameChome(b, a) {
 }
 
 // 返り値: { label: '実績ビル' | '実績ビル？' | '', building, reason, others }
+// 入っているのが教室だけの建物は「教室ビル」（レンタルスペースの実績とは分ける）
 function matchListing(x, buildings) {
+  const r = matchListingRaw(x, buildings);
+  if (r.label && r.building && r.building.school) r.label = r.label.replace('実績ビル', '教室ビル');
+  return r;
+}
+
+function matchListingRaw(x, buildings) {
   const a = x.addr || {};
   const nm = normName(x.name);
   const bn = baseName(x.name);

@@ -55,6 +55,50 @@ const buildings = bc.buildings.map((b) => {
   };
 });
 
+// 古い監視（rental-watcher）が見ていた建物リストも足す（2026-11-20：不二園ビルが実績ビルにならなかったため）。
+// HOMES の監視対象には入れない（巡回の時間が延びるため。足すなら別途）
+const EXTRA_SPACES = {
+  // 住所 → 既存スペースのURL（古いリストにURLがないもの）
+  '東京都中野区東中野3-1-20': 'https://d-dance.group/map/higashinakano2/',
+};
+const FLOOR_TOKEN = /^(B?\d+[FＦ階]?|B\d+F?|\d{3,4}(号室)?|地下\d*階?|\d+-\d+)$/i;
+let added = 0, merged = 0;
+try {
+  const rows = JSON.parse(fs.readFileSync(path.join(ROOT, 'outputs', 'backup-monitor-list-202611121649.json'), 'utf8')).slice(1);
+  for (const r of rows) {
+    if (!r || !r[2]) continue;
+    const address = String(r[2]).trim();
+    const am = address.match(/^(.*?\d+)-(\d+)/);
+    if (!am) continue;
+    const key = `${am[1]}-${am[2]}`;
+    const toks = String(r[3] || '').trim().split(/\s+/);
+    const nameToks = [];
+    for (const t of toks) { if (!t || FLOOR_TOKEN.test(t)) break; nameToks.push(t); }
+    const name = nameToks.join(' ');
+    const a = parseAddress(address);
+    const banchi = parseInt(am[2], 10);
+    const space = { name: r[1], url: r[10] || EXTRA_SPACES[address] || '', category: r[0], kind: String(r[6] || ''), source: '古い監視のリスト' };
+    const same = buildings.find((b) => b.key === key && (!name || !b.name || b.name === name || b.nameIsAddress));
+    if (same) {
+      if (!same.spaces.some((s) => s.name === space.name)) { same.spaces.push(space); merged++; }
+      if (!same.name && name) { same.name = name; same.nameIsAddress = false; }
+      continue;
+    }
+    buildings.push({
+      key, name, nameIsAddress: !name || /\d+-\d+/.test(name),
+      aliases: [], address,
+      ward: a.ward, town: a.town, chome: a.chome, banchi,
+      station: String(r[17] || '').replace(/駅$/, ''), walk: parseInt(String(r[18] || '').replace(/\D/g, ''), 10) || null,
+      spaces: [space], homes: null,
+    });
+    added++;
+  }
+} catch (e) { console.log('古い監視のリストが読めませんでした', e.message); }
+// 入っているのが教室（ダンススクール等）だけの建物。レンタルスペースとは分けて「教室ビル」として知らせる（2026-11-20）
+for (const b of buildings) b.school = b.spaces.length > 0 && b.spaces.every((x) => /教室/.test(x.kind || '') && !/レンタル/.test(x.kind || ''));
+console.log(`教室ビル ${buildings.filter((b) => b.school).length} 棟`);
+console.log(`古い監視のリストから 新しく ${added} 棟・既存の建物にスペース ${merged} 件を足した`);
+
 const seenHref = new Set();
 const homesTargets = [];
 for (const b of buildings) {

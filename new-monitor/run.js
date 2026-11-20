@@ -320,7 +320,7 @@ async function main() {
   if (process.env.NM_NOTIFY === '1' && process.env.DISCORD_WEBHOOK_URL) {
     for (const ev of events) {
       if (ev.duplicateOf || ev.notify === false) continue;
-      if (await notify.send(ev.text, process.env.DISCORD_WEBHOOK_URL)) sent++;
+      if (await notify.send(ev, process.env.DISCORD_WEBHOOK_URL)) sent++;
       await sleep(1200);
     }
   }

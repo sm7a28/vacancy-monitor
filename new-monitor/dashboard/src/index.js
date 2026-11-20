@@ -164,7 +164,7 @@ function jissekiBlock(b, label) {
     return `<div><span class="h">${head}</span> ${esc(nm)}${addr ? `　<a href="${esc(gmap(x.key + (x.name ? ' ' + x.name : '')))}" target="_blank" rel="noopener">${esc(addr)}</a>` : ''}${x.url ? `　<a href="${esc(x.url)}" target="_blank" rel="noopener">HOMES の建物ページ</a>` : ''}${sp}</div>`;
   };
   const parts = [];
-  if (b.name || b.key || (b.spaces || []).length) parts.push(one(b, label === '実績ビル？' ? '実績ビル（候補）：' : label ? '実績ビル：' : '同じ名前・シリーズの実績ビル：'));
+  if (b.name || b.key || (b.spaces || []).length) parts.push(one(b, label === '実績ビル？' ? '実績ビル（候補）：' : label === '教室ビル？' ? '教室ビル（候補）：' : label === '教室ビル' ? '教室ビル（教室が入っている建物）：' : label ? '実績ビル：' : '同じ名前・シリーズの実績ビル：'));
   for (const o of b.others || []) parts.push(one(o, '同じ丁目の実績ビル：'));
   return parts.length ? `<div class="jis">${parts.join('')}</div>` : '';
 }
@@ -172,6 +172,8 @@ function jissekiBlock(b, label) {
 function labelBadge(r) {
   if (r.label === '実績ビル') return '<span class="lb j">実績ビル</span>';
   if (r.label === '実績ビル？') return '<span class="lb q">実績ビル？</span>';
+  if (r.label === '教室ビル') return '<span class="lb j">教室ビル</span>';
+  if (r.label === '教室ビル？') return '<span class="lb q">教室ビル？</span>';
   if (r.tier === 'pinpoint') return '<span class="lb p">ピンポイント</span>';
   if (r.tier === 'focus') return '<span class="lb f">重点</span>';
   return '<span class="lb">向いてる物件</span>';
