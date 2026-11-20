@@ -12,6 +12,24 @@ function mapLink(x) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q || '')}`;
 }
 
+// 既存スペース（2026-11-20 ユーザー「実績アリは既存店のリンクがほしい。最低限店舗名はいる」）
+// URL が分からないスペース（古い監視のリストの多く）は、名前と住所の Google 検索に飛ばす
+function spaceUrl(s, b) {
+  if (s.url) return s.url;
+  return `https://www.google.com/search?q=${encodeURIComponent(`${s.name} ${(b && (b.address || b.key)) || ''}`.trim())}`;
+}
+// 照合した建物（実績ビル？は同じ丁目の候補すべて）の既存スペースを {name, url, building} で返す
+function existingSpaces(ev) {
+  if (ev.type === 'homes') return (ev.spaces || []).slice(0, 5).map((s) => ({ name: s.name, url: spaceUrl(s, { key: ev.buildingKey }), searched: !s.url }));
+  const m = ev.match || {};
+  if (!m.building) return [];
+  const many = /？$/.test(m.label || '') && (m.others || []).length > 1;
+  const bs = many ? m.others.slice(0, 3) : [m.building];
+  const out = [];
+  for (const b of bs) for (const s of (b.spaces || []).slice(0, many ? 2 : 4)) out.push({ name: s.name, url: spaceUrl(s, b), searched: !s.url, building: many ? (b.name || String(b.key || '').replace(/^東京都|^神奈川県/, '')) : '' });
+  return out;
+}
+
 function format(ev) {
   const x = ev.listing || {};
   const head = ev.label ? `【${ev.label}】` : '【向いてる物件】';
@@ -23,7 +41,7 @@ function format(ev) {
     lines.push(ev.room.url);
     lines.push(`建物ページ：${ev.buildingUrl}`);
     if (ev.buildingKey) lines.push(`場所：${String(ev.buildingKey).replace(/^東京都|^神奈川県/, '')}`);
-    for (const s of (ev.spaces || []).slice(0, 3)) lines.push(`既存スペース：${s.name} ${s.url}`);
+    for (const sp of existingSpaces(ev)) lines.push(`既存スペース：${sp.name}${sp.searched ? '（URL不明・検索）' : ''} ${sp.url}`);
     if (ev.inquired) lines.push(`${ev.inquired.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${ev.inquired.asked}：${ev.inquired.result}）`);
   } else {
     lines.push(`${x.kind || ''} ${x.address || ''}`.trim());
@@ -32,10 +50,7 @@ function format(ev) {
     if (x.posted) lines.push(`掲載：${x.posted}`);
     if (ev.judge.tags.length) lines.push(`メモ：${ev.judge.tags.join('・')}`);
     if (ev.match && ev.match.reason) lines.push(`照合：${ev.match.reason}`);
-    if (ev.match && ev.match.building) {
-      const b = ev.match.building;
-      for (const s of (b.spaces || []).slice(0, 3)) lines.push(`既存スペース：${s.name} ${s.url}`);
-    }
+    for (const sp of existingSpaces(ev)) lines.push(`既存スペース：${sp.building ? `（${sp.building}）` : ''}${sp.name}${sp.searched ? '（URL不明・検索）' : ''} ${sp.url}`);
     if (ev.alsoOn) lines.push(`ほかのサイトにも掲載：${ev.alsoOn}`);
     if (ev.priceDrop) lines.push(`値下げ：${man(ev.priceDrop.from)}→${man(ev.priceDrop.to)}`);
     if (ev.relist) lines.push(`再掲（前に見た募集と同じ部屋）`);
@@ -83,7 +98,7 @@ function embed(ev) {
     d.push('**HOMES の建物ページに新しい募集**');
     d.push(`${ev.room.floor} ${ev.room.area} ${ev.room.madori} ${ev.room.rent}（管理費 ${ev.room.admin || '-'}）`);
     if (ev.buildingKey) d.push(`場所：${String(ev.buildingKey).replace(/^東京都|^神奈川県/, '')}`);
-    for (const s of (ev.spaces || []).slice(0, 3)) d.push(`既存スペース：${link(s.name, s.url) || s.name}`);
+    for (const sp of existingSpaces(ev)) d.push(`既存スペース：${link(sp.name, sp.url)}${sp.searched ? '（URL不明・検索）' : ''}`);
     if (ev.inquired) d.push(`${ev.inquired.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${ev.inquired.asked}：${ev.inquired.result}）`);
     d.push(link('建物ページ', ev.buildingUrl));
   } else {
@@ -91,11 +106,11 @@ function embed(ev) {
     url = x.url;
     image = (x.images || [])[0] || '';
     d.push(`**${man(ev.judge.total)}**（家賃 ${man(x.rent)}＋管理費等 ${man(x.admin)}）／**${x.area}㎡**／坪 ${man(ev.judge.tsubo)}${x.floor ? `／${x.floor}` : ''}${x.madori ? `／${x.madori}` : ''}`);
+    for (const sp of existingSpaces(ev)) d.push(`既存スペース：${sp.building ? `（${sp.building}）` : ''}${link(sp.name, sp.url)}${sp.searched ? '（URL不明・検索）' : ''}`);
     d.push(stationLine(x));
     d.push(`${x.kind || ''} ${x.address || ''}`.trim());
     if (x.posted) d.push(`掲載：${x.posted}`);
     if (ev.match && ev.match.reason) d.push(`照合：${ev.match.reason}`);
-    if (ev.match && ev.match.building) for (const s of (ev.match.building.spaces || []).slice(0, 3)) d.push(`既存スペース：${link(s.name, s.url) || s.name}`);
     if (ev.judge.tags.length) d.push(`メモ：${ev.judge.tags.join('・')}`);
     if (ev.alsoOn) d.push(`ほかのサイトにも掲載：${ev.alsoOn}`);
     if (ev.priceDrop) d.push(`値下げ：${man(ev.priceDrop.from)}→${man(ev.priceDrop.to)}`);

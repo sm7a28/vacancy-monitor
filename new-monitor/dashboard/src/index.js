@@ -160,7 +160,9 @@ function jissekiBlock(b, label) {
   const one = (x, head) => {
     const addr = String(x.key || '').replace(/^東京都|^神奈川県/, '');
     const nm = x.name || '（建物名なし）';
-    const sp = (x.spaces || []).map((s) => `<a class="sp" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.source || '')}：${esc(s.name)}</a>`).join('');
+    // URL が分からないスペースは、名前と住所の Google 検索に飛ばす（2026-11-20）
+    const sUrl = (s) => s.url || `https://www.google.com/search?q=${encodeURIComponent(`${s.name} ${x.address || x.key || ''}`.trim())}`;
+    const sp = (x.spaces || []).map((s) => `<a class="sp" href="${esc(sUrl(s))}" target="_blank" rel="noopener">${esc(s.source || '')}：${esc(s.name)}${s.url ? '' : '（URL不明・検索）'}</a>`).join('');
     return `<div><span class="h">${head}</span> ${esc(nm)}${addr ? `　<a href="${esc(gmap(x.key + (x.name ? ' ' + x.name : '')))}" target="_blank" rel="noopener">${esc(addr)}</a>` : ''}${x.url ? `　<a href="${esc(x.url)}" target="_blank" rel="noopener">HOMES の建物ページ</a>` : ''}${sp}</div>`;
   };
   const parts = [];

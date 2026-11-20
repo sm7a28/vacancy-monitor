@@ -4,7 +4,7 @@
 name: new-monitor
 
 on:
-  # 定時の起動は Cloudflare の Worker nm-dashboard の Cron（JST 8:05/12:05/15:05/18:05）から行う。
+  # 定時の起動は Cloudflare の Worker nm-dashboard の Cron（JST 8:05/12:05/15:05/18:05/21:05）から行う。
   # GitHub の定時実行は混むと大きく遅れる・抜けるため使わない（2026-11-19）
   workflow_dispatch:
 

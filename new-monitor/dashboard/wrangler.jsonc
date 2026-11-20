@@ -7,8 +7,8 @@
   "workers_dev": false,
   "routes": [{ "pattern": "bukken.sevenart-projects.com", "custom_domain": true }],
   "d1_databases": [{ "binding": "DB", "database_name": "nm-dashboard", "database_id": "e80a8b60-8144-467f-b1b9-cc7dde3ba02d" }],
-  // JST 8:05 / 12:05 / 15:05 / 18:05 に GitHub の巡回を起動する
-  "triggers": { "crons": ["5 23,3,6,9 * * *"] },
+  // JST 8:05 / 12:05 / 15:05 / 18:05 / 21:05 に GitHub の巡回を起動する
+  "triggers": { "crons": ["5 23,3,6,9,12 * * *"] },
   // ログインリンクのメール（Email Routing の送信。宛先は Email Routing で確認済みのアドレスだけ）
   "send_email": [{ "name": "MAIL" }],
   // 許可するメールアドレスは secret の ALLOWED_EMAILS（公開リポジトリに書かない）
