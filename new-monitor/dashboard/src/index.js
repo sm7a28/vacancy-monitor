@@ -82,7 +82,7 @@ function row(ev, at) {
   const bInfo = m.building ? { ...slimB(m.building), others: (m.others || []).filter((o) => o.key !== m.building.key).slice(0, 4).map(slimB) }
     : (m.others && m.others.length ? { name: '', key: '', spaces: [], others: m.others.slice(0, 5).map(slimB) } : null);
   return {
-    id: x.id, site: x.site, type: 'listing', label: ev.label || '', tier: j.tier || '', notify: ev.notify === false ? 0 : 1,
+    id: x.id, site: x.site, type: 'listing', label: ev.label || '', tier: j.tier || '', notify: ev.notify === false || ev.duplicateOf ? 0 : 1,
     title: x.name || x.title || '', kind: x.kind || '', address: x.address || '',
     stations: (x.stations || []).filter((s) => s.station).map((s) => `${s.station}${s.walk != null ? ` ${s.walk}分` : ''}`).join('・'),
     rent: x.rent || 0, admin: x.admin || 0, total: j.total || 0, area: x.area || null, tsubo: j.tsubo || 0,

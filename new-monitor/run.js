@@ -118,6 +118,8 @@ async function main() {
       const prev = state.fps[fp];
       if (prev.site !== x.site) { ev.duplicateOf = prev; ev.alsoOn = prev.url; s.duplicates++; }
       else if (d0 - prev.d >= 3) { ev.relist = true; }
+      // 同じサイトで同じ部屋を別の仲介会社が出し直したもの（SUUMO は会社ごとに bc が変わる）は送らない（2026-11-21。ライオンズマンション日本橋の2部屋が2日で8回届いた）
+      else { ev.duplicateOf = prev; ev.kindLabel = '同じ部屋の別の仲介会社'; s.sameRoom = (s.sameRoom || 0) + 1; }
     }
     if (fp) state.fps[fp] = { id: x.id, site: x.site, url: x.url, d: d0 };
     const inq = matchInquiry(x, cand.inquiries);
@@ -129,7 +131,7 @@ async function main() {
     // 知らせる対象：実績ビル系は全部。向いてる物件は重点・ピンポイントと、地下・1階だけ（ふつうの地域は件数が多すぎるため記録のみ。2026-11-19）
     ev.notify = !!ev.label || j.tier !== 'normal' || j.tags.includes('地下') || j.tags.includes('1階');
     // 別サイトで先に知らせた部屋は、短く添えるだけ（速さ重視：先に出た方で知らせる）
-    ev.kindLabel = ev.duplicateOf ? '同じ部屋の別サイト掲載' : '';
+    if (!ev.kindLabel) ev.kindLabel = ev.duplicateOf ? '同じ部屋の別サイト掲載' : '';
     events.push(ev);
   }
 
