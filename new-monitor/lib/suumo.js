@@ -52,7 +52,7 @@ function parsePage(html) {
     const name = nfkc(stripTags(pick(/cassetteitem_content-title">([\s\S]*?)<\/div>/, part)));
     const address = nfkc(stripTags(pick(/cassetteitem_detail-col1">([\s\S]*?)<\/li>/, part)));
     const col2 = pick(/cassetteitem_detail-col2">([\s\S]*?)<\/li>/, part);
-    const stations = parseStations([...col2.matchAll(/cassetteitem_detail-text">([\s\S]*?)<\/div>/g)].map((m) => m[1]));
+    const stations = parseStations([...col2.matchAll(/cassetteitem_detail-text"[^>]*>([\s\S]*?)<\/div>/g)].map((m) => m[1]));
     const col3 = stripTags(pick(/cassetteitem_detail-col3">([\s\S]*?)<\/li>/, part));
     const age = parseInt((nfkc(col3).match(/築(\d+)年/) || [])[1] || (/新築/.test(col3) ? '0' : 'NaN'), 10);
     const stories = nfkc(col3).match(/(?:地下(\d+)地上)?(\d+)階建/);
