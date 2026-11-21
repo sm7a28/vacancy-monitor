@@ -42,7 +42,14 @@ function matchListing(x, buildings) {
   return r;
 }
 
-function matchListingRaw(x, buildings) {
+// SUUMO が建物名を伏せたときの仮の名前（「京王線 つつじヶ丘駅 2階建 築41年」など）は名前として扱わない（2026-11-21）
+function isPlaceholderName(s) {
+  const n = String(s || '').trim();
+  return n.length < 2 || /駅\s*\d+階建|築\d+年|^（建物名なし）/.test(n);
+}
+
+function matchListingRaw(x0, buildings) {
+  const x = isPlaceholderName(x0.name) ? { ...x0, name: '' } : x0;
   const a = x.addr || {};
   const nm = normName(x.name);
   const bn = baseName(x.name);
@@ -102,4 +109,4 @@ function matchInquiry(x, inquiries) {
   return null;
 }
 
-module.exports = { normName, baseName, matchListing, matchInquiry };
+module.exports = { normName, baseName, matchListing, matchInquiry, isPlaceholderName };
