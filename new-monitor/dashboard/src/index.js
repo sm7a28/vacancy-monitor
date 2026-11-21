@@ -138,6 +138,7 @@ form.f{display:flex;flex-wrap:wrap;gap:6px;align-items:center}form.f select,form
 .st{display:flex;gap:6px;margin-top:8px}.st button{font:inherit;font-size:13px;padding:3px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}.st button.on{background:var(--ink);color:var(--bg)}
 .reason{font-size:13px;color:var(--gold);margin-top:2px}.empty{color:var(--sub);padding:30px 0;text-align:center}
 .row{display:flex;gap:12px}.body{flex:1;min-width:0}
+.runhead{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px;margin:26px 0 6px;padding:7px 12px;border-radius:8px;background:var(--ink);color:var(--bg);font-weight:700;font-size:15px}.runhead:first-child{margin-top:4px}.runhead small{font-weight:400;font-size:12.5px;opacity:.85}
 .thumbs{flex:0 0 132px;display:grid;grid-template-columns:1fr 1fr;gap:3px;align-content:start}
 .thumbs a:first-child{grid-column:1/3}.thumbs img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;background:var(--line);display:block}
 .thumbs.none{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;height:auto;background:var(--bg);border:1px dashed var(--line);border-radius:6px;color:var(--muted);font-size:12px}
@@ -222,11 +223,36 @@ function healthLine(summary) {
     const bad = v.error || v.blocked || v.mayHaveGap || (v.failed && v.failed > 5);
     if (k === 'athomeDetail') { parts.push(`<span>アットホーム公開日 ${v.ok ? '1件取得' : '-'}（待ち${v.queued ?? 0}）</span>`); continue; }
     if (k === 'suumoDetail') { parts.push(`<span class="${v.failed > v.ok ? 'bad' : ''}">SUUMO 更新日 ${v.ok}/${v.tried}</span>`); continue; }
+    if (k === 'vision') { parts.push(`<span class="${v.failed || v.error ? 'bad' : ''}">写真判定 ${v.tried ?? 0}件${v.failed ? `（失敗${v.failed}）` : ''}${v.error ? ' エラー' : ''}</span>`); continue; }
     const n = k.startsWith('homes') ? `${v.ok}/${v.buildings}棟` : `新着${v.fresh ?? 0}`;
     const extra = v.blocked ? ' 認証画面' : v.mayHaveGap ? ' 取りこぼし?' : v.error ? ' エラー' : '';
     parts.push(`<span class="${bad ? 'bad' : ''}">${esc(k)} ${n}${extra}</span>`);
   }
   return parts.join('');
+}
+
+// 巡回の回ごとに見出しで区切る（2026-11-21 ユーザー「何日何時の分か区切りをわかりやすくして」）
+const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+function runLabel(at) {
+  const m = String(at || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return esc(at || '日時不明');
+  const w = WEEK[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()];
+  return `${+m[2]}/${+m[3]}（${w}）${m[4]}:${m[5]} の巡回`;
+}
+function groupByRun(rows) {
+  const out = [];
+  let cur = null;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.first_seen !== cur) {
+      cur = r.first_seen;
+      let n = 0, j = 0;
+      for (let k = i; k < rows.length && rows[k].first_seen === cur; k++) { n++; if (rows[k].label) j++; }
+      out.push(`<div class="runhead">${runLabel(cur)}<small>${n}件${j ? `（うち実績ビル系 ${j}件）` : ''}</small></div>`);
+    }
+    out.push(card(r));
+  }
+  return out.join('');
 }
 
 async function page(request, env, who) {
@@ -245,7 +271,7 @@ async function page(request, env, who) {
   if (q.status === 'none') where.push("status = ''");
   else if (q.status) { where.push('status = ?'); args.push(q.status); }
   if (q.q) { where.push('(title LIKE ? OR address LIKE ? OR stations LIKE ?)'); args.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`); }
-  const rows = (await env.DB.prepare(`SELECT * FROM listings WHERE ${where.join(' AND ')} ORDER BY (label <> '') DESC, first_seen DESC LIMIT 300`).bind(...args).all()).results;
+  const rows = (await env.DB.prepare(`SELECT * FROM listings WHERE ${where.join(' AND ')} ORDER BY first_seen DESC, (label <> '') DESC LIMIT 300`).bind(...args).all()).results;
   const last = await env.DB.prepare('SELECT summary FROM runs ORDER BY at DESC LIMIT 1').first();
   const summary = last ? JSON.parse(last.summary) : null;
   const sel = (name, opts) => `<select name="${name}">${opts.map(([v, t]) => `<option value="${v}"${(q[name] || (name === 'show' ? 'notify' : name === 'days' ? '7' : '')) === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
@@ -260,7 +286,7 @@ ${sel('status', [['', '印：全部'], ['none', '印なし'], ['consider', '検�
 ${sel('days', [['1', '今日'], ['3', '3日'], ['7', '7日'], ['30', '30日'], ['90', '90日']])}
 <input name="q" placeholder="駅・住所・名前" value="${esc(q.q || '')}" size="10"><button>絞り込む</button></form>
 <div class="health">${healthLine(summary)}</div></header>
-<main>${rows.length ? rows.map(card).join('') : '<div class="empty">該当する物件はありません</div>'}</main>
+<main>${rows.length ? groupByRun(rows) : '<div class="empty">該当する物件はありません</div>'}</main>
 <script>
 const BASE = ${JSON.stringify(request.nmBase || '')};
 document.addEventListener('click', async (e) => {

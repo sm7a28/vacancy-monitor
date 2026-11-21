@@ -337,8 +337,10 @@ async function main() {
   // 送る（試運転中は送らない）
   let sent = 0;
   if (process.env.NM_NOTIFY === '1' && process.env.DISCORD_WEBHOOK_URL) {
-    for (const ev of events) {
-      if (ev.duplicateOf || ev.notify === false) continue;
+    const toSend = events.filter((ev) => !ev.duplicateOf && ev.notify !== false);
+    // 先頭に「何日何時の巡回か」の区切りを1投稿（送るものがある回だけ）
+    if (toSend.length) { await notify.send(notify.separator(summary.at, toSend), process.env.DISCORD_WEBHOOK_URL); await sleep(1200); }
+    for (const ev of toSend) {
       if (await notify.send(ev, process.env.DISCORD_WEBHOOK_URL)) sent++;
       await sleep(1200);
     }

@@ -168,6 +168,20 @@ function headline(ev) {
   return `${extra(ev)}${g.mark}【${g.name}】${x.name || ''} ${man(ev.judge.total)} ${x.area}㎡${st ? ` ${st.station}${st.walk != null ? `徒歩${st.walk}分` : ''}${ridership(st.station) ? `（${ridership(st.station)}）` : ''}` : ''}`;
 }
 
+// 巡回ごとの区切りの投稿（2026-11-21 ユーザー「区切りだけで一投稿にするとか？！」）
+const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+function separator(at, list) {
+  const m = String(at || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  const when = m ? `${+m[2]}/${+m[3]}（${WEEK[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()]}）${m[4]}:${m[5]}` : String(at || '');
+  const j = list.filter((ev) => ev.label).length;
+  const studio = list.filter((ev) => ev.studio && (ev.studio.verdict === 'studio' || ev.studio.verdict === 'maybe')).length;
+  const bits = [`${list.length}件`];
+  if (j) bits.push(`⭐実績ビル系 ${j}件`);
+  if (studio) bits.push(`💃居抜き候補 ${studio}件`);
+  const bar = '━━━━━━━━━━━━━━━━';
+  return `${bar}\n📅 **${when} の巡回**　${bits.join('・')}\n${bar}`;
+}
+
 async function post(webhook, body) {
   return fetch(webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 }
@@ -181,4 +195,4 @@ async function send(ev, webhook) {
   return res.ok;
 }
 
-module.exports = { format, send, mapLink, embed, headline };
+module.exports = { format, send, mapLink, embed, headline, separator };
