@@ -1,0 +1,24 @@
+# 手作業で探した物件を Discord に送る（new-monitor/data/manual-send.json.enc の中身）。手で起動するだけ。
+name: new-monitor-send
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: 送る
+        env:
+          NM_KEY: ${{ secrets.NM_KEY }}
+          NM_DASH_URL: ${{ secrets.NM_DASH_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: node new-monitor/tools/send-manual.js
