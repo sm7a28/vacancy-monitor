@@ -1,0 +1,9 @@
+{
+  "name": "new-monitor",
+  "private": true,
+  "description": "新しい監視（SUUMO・アットホーム・HOMES）。写真の判定に Claude API を使う",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.6.0"
+  }
+}

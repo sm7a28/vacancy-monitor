@@ -311,6 +311,12 @@ async function main() {
   for (const [fp, v] of Object.entries(state.fps)) if (d0 - (v.d || 0) > KEEP_DAYS) delete state.fps[fp];
   state.runCount = runIndex + 1;
 
+  // 写真からスタジオの居抜きを見分ける（Claude API。キーがあるときだけ）（2026-11-21）
+  if (process.env.ANTHROPIC_API_KEY && process.env.NM_NO_VISION !== '1') {
+    try { summary.sources.vision = await require('./lib/vision').checkEvents(events); }
+    catch (e) { summary.sources.vision = { error: String(e).slice(0, 200) }; }
+  }
+
   // 結果を残す
   for (const ev of events) ev.text = notify.format(ev);
   const resFile = path.join(RESULTS_DIR, `${jstDate()}.json.enc`);

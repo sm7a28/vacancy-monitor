@@ -112,8 +112,11 @@ const STUDIO_BASEMENT_MIN_AREA = 20;
 function extra(ev) {
   const x = ev.listing || {};
   const tags = (ev.judge && ev.judge.tags) || [];
-  if (tags.includes('地下') && x.area >= STUDIO_BASEMENT_MIN_AREA) return '🤩【地下・スタジオ向き】';
-  return '';
+  // 写真の AI 判定でスタジオの居抜きらしいもの（lib/vision.js）
+  const v = ev.studio && ev.studio.verdict;
+  const iv = v === 'studio' ? '💃【スタジオ居抜き】' : v === 'maybe' ? '💃【スタジオ居抜き？】' : '';
+  if (tags.includes('地下') && x.area >= STUDIO_BASEMENT_MIN_AREA) return iv + '🤩【地下・スタジオ向き】';
+  return iv;
 }
 
 function embed(ev) {

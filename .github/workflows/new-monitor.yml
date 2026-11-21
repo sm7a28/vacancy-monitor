@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: '24'
 
+      - name: 写真判定用の Claude SDK を入れる
+        run: npm ci --prefix new-monitor --no-audit --no-fund
+
       - name: 既読の記録を戻す
         uses: actions/cache/restore@v4
         with:
@@ -42,6 +45,7 @@ jobs:
           NM_DASH_TOKEN: ${{ secrets.NM_DASH_TOKEN }}
           NM_NOTIFY: '1'
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: node new-monitor/run.js
 
       - name: 既読の記録を保存
