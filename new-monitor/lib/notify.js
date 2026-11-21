@@ -66,12 +66,12 @@ function format(ev) {
 // 印と色（2026-11-20 ユーザー「物件と物件の区切りがわかりにくい」「実績アリとかA級物件は何か印付けて」）
 // 1件ずつ Discord の埋め込み（左に色の帯が付くカード）で送る。リンクの自動プレビューは出ない
 const GRADE = {
-  // 実績ビル系は印だけ⭐でそろえ、帯の色と文字は分ける。ピンポイントと重点は印だけ🟢でそろえる（2026-11-20 ユーザー指示）
+  // 実績ビル系は印だけ⭐でそろえ、帯の色と文字は分ける。ピンポイントは🎯・重点は🟢（2026-11-21 変更）（2026-11-20 ユーザー指示）
   '実績ビル': { mark: '⭐', color: 0xe03131 },
   '実績ビル？': { mark: '⭐', color: 0xf08c00 },
   '教室ビル': { mark: '⭐', color: 0x9c36b5 },
   '教室ビル？': { mark: '⭐', color: 0xcc5de8 },
-  pinpoint: { mark: '🟢', color: 0xf59f00, name: 'ピンポイント' },
+  pinpoint: { mark: '🎯', color: 0xf59f00, name: '一等地' }, // 表示名は「一等地」（2026-11-21 ユーザー指示。中では pinpoint のまま）
   focus: { mark: '🟢', color: 0x1c7ed6, name: '重点' },
   normal: { mark: '⚪', color: 0x868e96, name: '向いてる物件' },
 };
@@ -84,6 +84,15 @@ function grade(ev) {
 }
 
 const link = (label, url) => (url ? `[${label}](${url})` : '');
+
+// スタジオに使えそうな地下（20㎡以上）は題名にも印を出す（2026-11-21 ユーザー「スタジオに使えそうな地下もわかりやすくして」）
+const STUDIO_BASEMENT_MIN_AREA = 20;
+function extra(ev) {
+  const x = ev.listing || {};
+  const tags = (ev.judge && ev.judge.tags) || [];
+  if (tags.includes('地下') && x.area >= STUDIO_BASEMENT_MIN_AREA) return '🤩【地下・スタジオ向き】';
+  return '';
+}
 
 function embed(ev) {
   const x = ev.listing || {};
@@ -102,7 +111,7 @@ function embed(ev) {
     if (ev.inquired) d.push(`${ev.inquired.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${ev.inquired.asked}：${ev.inquired.result}）`);
     d.push(link('建物ページ', ev.buildingUrl));
   } else {
-    title = `${g.mark}【${g.name}】${ev.kindLabel ? `【${ev.kindLabel}】` : ''}${x.name || x.title || ''}`;
+    title = `${extra(ev)}${g.mark}【${g.name}】${ev.kindLabel ? `【${ev.kindLabel}】` : ''}${x.name || x.title || ''}`;
     url = x.url;
     image = (x.images || [])[0] || '';
     d.push(`**${man(ev.judge.total)}**（家賃 ${man(x.rent)}＋管理費等 ${man(x.admin)}）／**${x.area}㎡**／坪 ${man(ev.judge.tsubo)}${x.floor ? `／${x.floor}` : ''}${x.madori ? `／${x.madori}` : ''}`);
@@ -131,7 +140,7 @@ function headline(ev) {
   const x = ev.listing || {};
   if (ev.type === 'homes') return `${g.mark}【${g.name}】${ev.buildingName || ''} ${ev.room.floor} ${ev.room.rent}`;
   const st = (x.stations || [])[0];
-  return `${g.mark}【${g.name}】${x.name || ''} ${man(ev.judge.total)} ${x.area}㎡${st ? ` ${st.station}${st.walk != null ? `徒歩${st.walk}分` : ''}` : ''}`;
+  return `${extra(ev)}${g.mark}【${g.name}】${x.name || ''} ${man(ev.judge.total)} ${x.area}㎡${st ? ` ${st.station}${st.walk != null ? `徒歩${st.walk}分` : ''}` : ''}`;
 }
 
 async function post(webhook, body) {

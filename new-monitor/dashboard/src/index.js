@@ -176,7 +176,7 @@ function labelBadge(r) {
   if (r.label === '実績ビル？') return '<span class="lb q">実績ビル？</span>';
   if (r.label === '教室ビル') return '<span class="lb j">教室ビル</span>';
   if (r.label === '教室ビル？') return '<span class="lb q">教室ビル？</span>';
-  if (r.tier === 'pinpoint') return '<span class="lb p">ピンポイント</span>';
+  if (r.tier === 'pinpoint') return '<span class="lb p">一等地</span>';
   if (r.tier === 'focus') return '<span class="lb f">重点</span>';
   return '<span class="lb">向いてる物件</span>';
 }

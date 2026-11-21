@@ -6,7 +6,9 @@
 const fs = require('fs');
 const path = require('path');
 const { loadKey, readEnc, writeEnc } = require('./lib/store');
-const { sleep, getText, jstStamp, jstDate, chomeKey } = require('./lib/util');
+const { sleep, getText, jstStamp, jstDate, chomeKey, parseYen } = require('./lib/util');
+// 実績ビル系は坪単価を問わず、家賃（管理費込み）17万円までなら拾う（2026-11-21 ユーザー「17万にするか 坪の制限はなしで」）
+const JISSEKI_MAX_TOTAL = 170000;
 const suumo = require('./lib/suumo');
 const athome = require('./lib/athome');
 const { judge } = require('./lib/area');
@@ -98,8 +100,16 @@ async function main() {
     state.seen[x.id] = { d: d0, t: j.total || 0 };
     seenSet.add(x.id);
     if (seeding) return;
-    if (!j.pass) { s.rejected++; return; }
-    const match = matchListing(x, cand.buildings);
+    let preMatch = null;
+    if (!j.pass) {
+      // 駅・広さ・地域の条件は通っていて（tier が付いている）、家賃・坪で落ちた物件だけ、実績ビルなら拾い直す
+      preMatch = j.tier ? matchListing(x, cand.buildings) : null;
+      if (!(preMatch && preMatch.label && j.total && j.total <= JISSEKI_MAX_TOTAL)) { s.rejected++; return; }
+      j.pass = true;
+      j.tags.push('坪単価は実績ビルのため問わない');
+      s.jissekiOverTsubo = (s.jissekiOverTsubo || 0) + 1;
+    }
+    const match = preMatch || matchListing(x, cand.buildings);
     // 業態ごとの徒歩圏内に入らない物件は、実績ビル系でなければ拾わない
     if (!match.label && !guessGenre(x, j)) { s.tooFar = (s.tooFar || 0) + 1; return; }
     s.passed++;
@@ -283,7 +293,10 @@ async function main() {
           if (!prev.rooms.includes(room.url)) {
             src.newRooms++;
             const inq = matchInquiry({ url: room.url, name: t.name, addr: {} }, cand.inquiries);
-            events.push({ type: 'homes', source: 'homes', label: '実績ビル', buildingKey: t.key, buildingName: t.name, buildingUrl: t.href, room, building: j.building, spaces: ((cand.buildings.find((x) => x.key === t.key) || {}).spaces || []).slice(0, 5), inquired: inq ? { same: inq.same, asked: inq.q.asked, result: inq.q.result } : undefined });
+            // HOMES の部屋も家賃（管理費込み）17万円まで知らせる。超えるものは記録のみ（2026-11-21）
+            const rTotal = (parseYen(room.rent || '') || 0) + (parseYen(room.admin || '') || 0);
+            const overMax = rTotal > JISSEKI_MAX_TOTAL;
+            events.push({ type: 'homes', source: 'homes', label: '実績ビル', notify: overMax ? false : undefined, total: rTotal || undefined, buildingKey: t.key, buildingName: t.name, buildingUrl: t.href, room, building: j.building, spaces: ((cand.buildings.find((x) => x.key === t.key) || {}).spaces || []).slice(0, 5), inquired: inq ? { same: inq.same, asked: inq.q.asked, result: inq.q.result } : undefined });
           }
         }
       }
