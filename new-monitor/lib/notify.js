@@ -3,8 +3,30 @@
 
 const man = (yen) => (yen ? `${Math.round(yen / 1000) / 10}万円` : '-');
 
+// 駅の乗降客数（1日あたり・2024年度、国土数値情報。tools/make-ridership.js で作る）
+// 2026-11-21 ユーザー「最寄り駅の乗降客数のってなくないか」（ヒットの報告に必ず添える項目）
+const { normStation } = require('./area');
+let RIDERSHIP = {};
+try { RIDERSHIP = require('../data/ridership.json').stations || {}; } catch (e) { /* 表がなくても通知は送る */ }
+// 表記ゆれ（四谷↔四ツ谷、ヶ↔が、の↔ノ、「押上（スカイツリー前）」のかっこ）を吸収して引く
+const STATION_ALIAS = { 四谷: '四ツ谷' };
+function lookupRidership(name) {
+  const base = normStation(String(name || '').replace(/[（(].*$/, ''));
+  const tries = [base, STATION_ALIAS[base], base.replace(/が/g, 'ケ'), base.replace(/ケ/g, 'が'), base.replace(/の/g, 'ノ'), base.replace(/ノ/g, 'の')];
+  for (const t of tries) if (t && RIDERSHIP[t]) return RIDERSHIP[t];
+  return 0;
+}
+function ridership(name) {
+  const n = lookupRidership(name);
+  if (!n) return '';
+  return n >= 10000 ? `乗降${(n / 10000).toFixed(1)}万人` : `乗降${n.toLocaleString('ja-JP')}人`;
+}
+
 function stationLine(x) {
-  return (x.stations || []).filter((s) => s.station).slice(0, 3).map((s) => `${s.station}${s.walk != null ? ` 徒歩${s.walk}分` : ''}`).join('・');
+  return (x.stations || []).filter((s) => s.station).slice(0, 3).map((s) => {
+    const r = ridership(s.station);
+    return `${s.station}${s.walk != null ? ` 徒歩${s.walk}分` : ''}${r ? `（${r}）` : ''}`;
+  }).join('・');
 }
 
 function mapLink(x) {
@@ -129,7 +151,7 @@ function embed(ev) {
     d.push(links.filter(Boolean).join('　'));
   }
   if (process.env.NM_DASH_URL) d.push(link('一覧', `${process.env.NM_DASH_URL}/`));
-  const e = { title: title.slice(0, 250), url, color: g.color, description: d.filter(Boolean).join('\n').slice(0, 3800), footer: { text: SITE[ev.type === 'homes' ? 'homes' : x.site] || '' } };
+  const e = { title: title.slice(0, 250), url, color: g.color, description: d.filter(Boolean).join('\n').slice(0, 3800), footer: { text: `${SITE[ev.type === 'homes' ? 'homes' : x.site] || ''}${ev.type === 'homes' ? '' : '　乗降は1日あたり・2024年度（国土数値情報）'}` } };
   if (image) e.thumbnail = { url: image };
   return e;
 }
@@ -140,7 +162,7 @@ function headline(ev) {
   const x = ev.listing || {};
   if (ev.type === 'homes') return `${g.mark}【${g.name}】${ev.buildingName || ''} ${ev.room.floor} ${ev.room.rent}`;
   const st = (x.stations || [])[0];
-  return `${extra(ev)}${g.mark}【${g.name}】${x.name || ''} ${man(ev.judge.total)} ${x.area}㎡${st ? ` ${st.station}${st.walk != null ? `徒歩${st.walk}分` : ''}` : ''}`;
+  return `${extra(ev)}${g.mark}【${g.name}】${x.name || ''} ${man(ev.judge.total)} ${x.area}㎡${st ? ` ${st.station}${st.walk != null ? `徒歩${st.walk}分` : ''}${ridership(st.station) ? `（${ridership(st.station)}）` : ''}` : ''}`;
 }
 
 async function post(webhook, body) {
