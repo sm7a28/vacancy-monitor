@@ -64,7 +64,7 @@ function format(ev) {
     lines.push(`建物ページ：${ev.buildingUrl}`);
     if (ev.buildingKey) lines.push(`場所：${String(ev.buildingKey).replace(/^東京都|^神奈川県/, '')}`);
     for (const sp of existingSpaces(ev)) lines.push(`既存スペース：${sp.name}${sp.searched ? '（URL不明・検索）' : ''} ${sp.url}`);
-    if (ev.inquired) lines.push(`${ev.inquired.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${ev.inquired.asked}：${ev.inquired.result}）`);
+    if (ev.inquired) lines.push(`${ev.inquired.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${ev.inquired.via ? ev.inquired.via + ' ' : ''}${ev.inquired.asked}：${ev.inquired.result}）`);
   } else {
     lines.push(`${x.kind || ''} ${x.address || ''}`.trim());
     lines.push(`${stationLine(x)}`);
@@ -130,7 +130,7 @@ function embed(ev) {
     d.push(`${ev.room.floor} ${ev.room.area} ${ev.room.madori} ${ev.room.rent}（管理費 ${ev.room.admin || '-'}）`);
     if (ev.buildingKey) d.push(`場所：${String(ev.buildingKey).replace(/^東京都|^神奈川県/, '')}`);
     for (const sp of existingSpaces(ev)) d.push(`既存スペース：${link(sp.name, sp.url)}${sp.searched ? '（URL不明・検索）' : ''}`);
-    if (ev.inquired) d.push(`${ev.inquired.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${ev.inquired.asked}：${ev.inquired.result}）`);
+    if (ev.inquired) d.push(`${ev.inquired.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${ev.inquired.via ? ev.inquired.via + ' ' : ''}${ev.inquired.asked}：${ev.inquired.result}）`);
     d.push(link('建物ページ', ev.buildingUrl));
   } else {
     title = `${extra(ev)}${g.mark}【${g.name}】${ev.kindLabel ? `【${ev.kindLabel}】` : ''}${x.name || x.title || ''}`;

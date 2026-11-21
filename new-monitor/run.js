@@ -121,7 +121,7 @@ async function main() {
     }
     if (fp) state.fps[fp] = { id: x.id, site: x.site, url: x.url, d: d0 };
     const inq = matchInquiry(x, cand.inquiries);
-    if (inq) { ev.inquired = { same: inq.same, asked: inq.q.asked, result: inq.q.result }; j.tags.unshift(inq.same === 'listing' ? `問い合わせ済み（${inq.q.asked}：${inq.q.result}）` : `同じ建物に問い合わせ済み（${inq.q.asked}：${inq.q.result}）`); }
+    if (inq) { ev.inquired = { same: inq.same, asked: inq.q.asked, via: inq.q.via || '', result: inq.q.result }; j.tags.unshift(`${inq.same === 'listing' ? '問い合わせ済み' : '同じ建物に問い合わせ済み'}（${inq.q.via ? inq.q.via + ' ' : ''}${inq.q.asked}：${inq.q.result}）`); }
     ev.mapUrl = notify.mapLink(x);
     ev.ib = instabaseLinks(x, j);
     ev.salonUrl = ev.ib ? ev.ib.url : '';
@@ -296,7 +296,7 @@ async function main() {
             // HOMES の部屋も家賃（管理費込み）17万円まで知らせる。超えるものは記録のみ（2026-11-21）
             const rTotal = (parseYen(room.rent || '') || 0) + (parseYen(room.admin || '') || 0);
             const overMax = rTotal > JISSEKI_MAX_TOTAL;
-            events.push({ type: 'homes', source: 'homes', label: '実績ビル', notify: overMax ? false : undefined, total: rTotal || undefined, buildingKey: t.key, buildingName: t.name, buildingUrl: t.href, room, building: j.building, spaces: ((cand.buildings.find((x) => x.key === t.key) || {}).spaces || []).slice(0, 5), inquired: inq ? { same: inq.same, asked: inq.q.asked, result: inq.q.result } : undefined });
+            events.push({ type: 'homes', source: 'homes', label: '実績ビル', notify: overMax ? false : undefined, total: rTotal || undefined, buildingKey: t.key, buildingName: t.name, buildingUrl: t.href, room, building: j.building, spaces: ((cand.buildings.find((x) => x.key === t.key) || {}).spaces || []).slice(0, 5), inquired: inq ? { same: inq.same, asked: inq.q.asked, via: inq.q.via || '', result: inq.q.result } : undefined });
           }
         }
       }

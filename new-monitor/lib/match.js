@@ -92,7 +92,8 @@ function matchInquiry(x, inquiries) {
   const k = urlKey(x.url);
   const nm = normName(x.name);
   for (const q of inquiries || []) {
-    if (k && urlKey(q.url) === k) return { same: 'listing', q };
+    // 物件問い合わせ記録.csv から取り込んだ分は URL がなく、アットホームの物件番号（athomeNo）だけを持つ
+    if (k && (urlKey(q.url) || (q.athomeNo ? `athome:${q.athomeNo}` : '')) === k) return { same: 'listing', q };
   }
   for (const q of inquiries || []) {
     const qn = normName(String(q.name || '').replace(/\s*(B?\d+階|B\d+).*$/, ''));
